@@ -168,8 +168,8 @@ if __name__ == '__main__':
 	epoch_no = 0
 	model_name = "vae_new3"
 	if args.resume:
-		bVAE_enc.load_state_dict(torch.load(os.path.join("/home/levent/3dShapes/models/", model_name + "_V_enc_" + str(epoch_no))))
-		bVAE_dec.load_state_dict(torch.load(os.path.join("/home/levent/3dShapes/models/", model_name + "_V_dec_" + str(epoch_no))))
+		bVAE_enc.load_state_dict(torch.load(os.path.join("./models/", model_name + "_V_enc_" + str(epoch_no))))
+		bVAE_dec.load_state_dict(torch.load(os.path.join("./models/", model_name + "_V_dec_" + str(epoch_no))))
 	
 
 
