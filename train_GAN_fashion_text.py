@@ -271,7 +271,9 @@ transforms.Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.2613025
 			fake_logit = D(fake,txt_feat_relevant)
 			fake_loss = criterionGAN(fake_logit, True)
 			
-			vgg_loss =  1.0 * criterionVGG(fake, img_rel)
+			#vgg_loss =  1.0 * criterionVGG(fake, img_rel)
+			vgg_loss =  1.0 * criterionVGG(fake, video_sample)
+			
 			avg_G_fake_loss += fake_loss.data.item()
 			avg_vgg_loss += vgg_loss.data.item()
 			G_loss = fake_loss + vgg_loss 
