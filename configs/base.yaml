@@ -1,0 +1,93 @@
+project_title: VideoManipulation
+
+model:
+  base_learning_rate: 1.0e-4
+  target: dicomogan.models.dicomogan.DiCoMOGAN
+  project : "video-manipulation"
+
+  params:
+    vae_cond_dim : 8 # must match text encoder latent_dim
+    beta: 8
+    ODE_func_config:
+      target: dicomogan.modules.LatentODEfunc
+      params:
+        latent_dim : 4 # must match dynamic_latent_dim
+        nhidden : 20 
+
+    video_ecnoder_config:
+      target: dicomogan.modules.EncoderVideo_LatentODE
+      params:
+        img_size : [3,128,96] # must match video_decoder
+        static_latent_dim : 12
+        dynamic_latent_dim : 4 # must match ODE_func_config latent_dim
+        hid_channels : 32 
+        kernel_size : 4
+        hidden_dim : 256
+
+    video_decoder_config:
+      target: dicomogan.modules.Decoder
+      params:
+        img_size : [3,128,96] # must match video_encoder
+        latent_dim : 16 # should match static_latent_dim + dynamic_latent_dim
+
+    text_encoder_config:
+      target: dicomogan.modules.TextEncoder
+      params:
+        text_size : 512
+        latent_dim : 8 # must match vae_cond_enc
+
+    discriminator_config:
+      target: dicomogan.modules.MultiscaleDiscriminatorPixpixHDMFMOD
+      params:
+        input_nc: 3
+        ndf : 64
+        n_layers : 3
+        use_sigmoid : False
+        num_D : 3
+
+    generator_config:
+      target: dicomogan.modules.Generator2
+      params:
+        fsize : 64
+
+    mapping_config:
+      target: dicomogan.modules.MappingNetworkVAE
+      params:
+        input_dim : 8 # must match dynamic_latent + (static_latent - text_latent)
+        fsize : 256
+
+
+    
+data:
+  target: main.DataModuleFromConfig
+  params:
+    batch_size: 2 # MUST Match batch size in dataset
+    num_workers: 8
+    train:
+      target: data.video.VideoDataFashion
+      params:
+        img_root: /userfiles/hpc-lkaracan/fashion_dataset/
+        n_frames_total : 4
+        batch_size : 2 #MUST match batch size 
+        crop : [512, 384]
+        size : [256, 192]
+
+    validation:
+      target: data.video.VideoDataFashionTest
+      params:
+        img_root: /userfiles/hpc-lkaracan/fashion_dataset/
+        n_frames_total : 4
+        batch_size : 2 #MUST match batch size 
+        crop : [512, 384]
+        size : [256, 192]
+
+
+lightning:
+  trainer:
+    limit_val_batches : 2
+    replace_sampler_ddp : False
+
+  modelcheckpoint:
+    params:
+      monitor : 'clip/val/clip_loss'
+      save_top_k : 1

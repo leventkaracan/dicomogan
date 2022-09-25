@@ -1,0 +1,1 @@
+python train_BVAE_LatentODE_fashion.py --img_root ./data/fashion_datasetv3/fashion_dataset/  --save_filename ./data/models/bVAE_ode_fashion --num_epochs 100 --beta 8
