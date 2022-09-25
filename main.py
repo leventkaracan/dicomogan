@@ -707,14 +707,14 @@ if __name__ == "__main__":
                     "id": nowname,
                 }
             },
-            # "image_logger": {
-            #     "target": "main.ImageLogger",
-            #     "params": {
-            #         "batch_frequency": 100000000, # 750
-            #         "max_images": 16,
-            #         "clamp": True
-            #     }
-            # },
+            "image_logger": {
+                "target": "main.ImageLogger",
+                "params": {
+                    "batch_frequency": 100000000, # 750
+                    "max_images": 16,
+                    "clamp": True
+                }
+            },
             "learning_rate_logger": {
                 "target": "main.LearningRateMonitor",
                 "params": {

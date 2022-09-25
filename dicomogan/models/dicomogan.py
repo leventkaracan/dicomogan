@@ -29,9 +29,14 @@ class DiCoMOGAN(pl.LightningModule):
                     discriminator_config,
                     generator_config,
                     mapping_config,
+                    lambda_unsup,
+                    lambda_vgg,
+                    lambda_G,
+                    lambda_bvae,
+                    lambda_D,
                     scheduler_config = None,
                     custom_loggers = None,
-                    n_critic = 1
+                    n_critic = 1,
                     ):
         super().__init__()
         self.clip_img_transform = transforms.Compose([
@@ -43,6 +48,13 @@ class DiCoMOGAN(pl.LightningModule):
         self.beta = beta
         self.scheduler_config = scheduler_config
         self.n_critic = n_critic
+
+        # Loss weights
+        self.lambda_unsup = lambda_unsup
+        self.lambda_vgg = lambda_vgg
+        self.lambda_G = lambda_G
+        self.lambda_bvae = lambda_bvae
+        self.lambda_D = lambda_D
 
         # initialize model
         self.func = instantiate_from_config(ODE_func_config) 
@@ -77,7 +89,7 @@ class DiCoMOGAN(pl.LightningModule):
         assert batch_size != 0
 
         if distribution == 'bernoulli':
-            recon_loss = F.binary_cross_entropy(x_recon, x, reduction="sum")
+            recon_loss = F.binary_cross_entropy(x_recon, x, reduction="mean")
             #recon_loss = F.binary_cross_entropy_with_logits(x_recon, x, size_average=False)
 
         elif distribution == 'gaussian':
@@ -215,7 +227,7 @@ class DiCoMOGAN(pl.LightningModule):
             self.log("train/vgg_loss", vgg_loss, prog_bar=False, logger=True, on_step=True, on_epoch=True)
             self.log("train/unsup_loss", unsup_loss, prog_bar=False, logger=True, on_step=True, on_epoch=True)
             
-            total_loss = beta_vae_loss + G_loss + vgg_loss + unsup_loss
+            total_loss = self.lambda_bvae * beta_vae_loss + self.lambda_G * G_loss + self.lambda_vgg * vgg_loss + self.lambda_unsup * unsup_loss
             self.log("train/generator_loss", total_loss, prog_bar=False, logger=True, on_step=True, on_epoch=True)
             return total_loss
             
@@ -258,7 +270,7 @@ class DiCoMOGAN(pl.LightningModule):
             D_loss += Disc_loss(video_sample, txt_feat_relevant, latentw_relevant, False)
 
             self.log("train/D_loss", D_loss, prog_bar=True, logger=True, on_step=True, on_epoch=True)
-            return D_loss
+            return self.lambda_D * D_loss
 
     def log_images(self, batch, split):
         ret = dict()
@@ -294,7 +306,7 @@ class DiCoMOGAN(pl.LightningModule):
         muT, logvarT = self.text_enc(txt_feat)
         zT = self.reparametrize(muT, logvarT) # T*B x D 
         
-        ret['image'] = vid_rs
+        ret['image'] = vid_rs_full
         ret['x_recon_vae_text'] = self.bVAE_dec(torch.cat((zT,z_vid[:, self.vae_cond_dim:]), 1)) # T*B x C x H x W
         ret['x_recon_vae'] = self.bVAE_dec(z_vid) # T*B x C x H x W
 
@@ -309,10 +321,10 @@ class DiCoMOGAN(pl.LightningModule):
 
         return ret
 
+    # TODO: Check betas and epsilons of the optimizers
     def configure_optimizers(self):
         lr = self.learning_rate
-        params = list(self.func.parameters())+\
-                 list(self.bVAE_enc.parameters())+\
+        params = list(self.bVAE_enc.parameters())+\
                  list(self.bVAE_dec.parameters())+\
                  list(self.text_enc.parameters())+\
                  list(self.G.parameters())+\
