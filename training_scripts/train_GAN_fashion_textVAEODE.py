@@ -255,7 +255,7 @@ if __name__ == '__main__':
 			# Question: is it alright to move sampling to the dataloader? 
 			sampleT = np.arange(T-1) + 1
 			sampleT = np.random.choice(sampleT, 3, replace= False)
-			sampleT = np.insert(sampleT, 0, 0, axis=0)
+			sampleT = np.insert(sampleT, 0, 0, axis=0) # Question: does it have to start with the first frame or it does not matter?
 			sampleT = np.sort(sampleT)
 			#print(sampleT)
 			ts = (sampleT)*0.01 # Question: Why normalize ts?

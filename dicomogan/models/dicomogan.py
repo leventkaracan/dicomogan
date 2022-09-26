@@ -64,7 +64,8 @@ class DiCoMOGAN(pl.LightningModule):
         self.G = instantiate_from_config(generator_config)
         self.mapping = instantiate_from_config(mapping_config) 
         self.D = instantiate_from_config(discriminator_config)
-        self.clip_model, self.clip_preprocess = clip.load("ViT-B/32", device="cuda")
+        self.clip_model, self.clip_preprocess = clip.load("ViT-B/32") # TODO: if not gonna use clip, then load all embeds before training. Save 3g memeory
+        self.clip_model = self.clip_model 
         self.clip_model.requires_grad_(False)
 
         # loss
@@ -89,7 +90,7 @@ class DiCoMOGAN(pl.LightningModule):
         assert batch_size != 0
 
         if distribution == 'bernoulli':
-            recon_loss = F.binary_cross_entropy(x_recon, x, reduction="mean")
+            recon_loss = F.binary_cross_entropy(x_recon, x, reduction="sum")
             #recon_loss = F.binary_cross_entropy_with_logits(x_recon, x, size_average=False)
 
         elif distribution == 'gaussian':
@@ -116,7 +117,9 @@ class DiCoMOGAN(pl.LightningModule):
 
     def clip_encode_text(self, texts):
         text = clip.tokenize(texts).to(self.device)
-        return self.clip_model.encode_text(text).float() # B x D
+        tmp =  self.clip_model.encode_text(text)
+        tmp = tmp.float() # B x D
+        return tmp
 
     def on_training_start(self):
         for v in self.trainer.train_dataloaders:
@@ -332,7 +335,7 @@ class DiCoMOGAN(pl.LightningModule):
 
         opt_ae = torch.optim.Adam(params,
                                   lr=lr, 
-                                  betas=(0.9, 0.99))
+                                  betas=(0.5, 0.99))
         
         
         
@@ -348,7 +351,7 @@ class DiCoMOGAN(pl.LightningModule):
                         'interval': 'step'}
 
         opt_disc = torch.optim.Adam(dis_params,
-                                lr=lr, betas=(0.9, 0.99)) 
+                                lr=lr, betas=(0.5, 0.99)) 
         
         disc_ret = {"optimizer": opt_disc, "frequency": 1}
         if self.scheduler_config is not None:
