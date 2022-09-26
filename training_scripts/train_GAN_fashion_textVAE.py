@@ -394,7 +394,7 @@ transforms.Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.2613025
 			# synthesized image with semantically relevant text
 			latentw = mapping(z_vid[:,vae_cond_dim:])
 			_,txt_feat_relevant = preprocess_feat(txt_feat)
-			fake = G(video_sample, txt_feat_relevant, latentw)
+			fake = G(video_sample, txt_feat_relevant, latentw) 
 			fake_logit = D(fake.detach(), txt_feat_relevant, latentw)
 			fake_loss =  0.5/3 * criterionGAN(fake_logit, False)
 			avg_D_fake_loss += fake_loss.data.item()
@@ -450,6 +450,7 @@ transforms.Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.2613025
 			imgsplits = torch.split(video_sample, int((bs * 4)/2), 0)
 			img_rel = torch.cat((torch.roll(imgsplits[0], -1, 0), imgsplits[1]), 0)
 
+			# Question: does't make sense to add the mismatched text/ mismatched latent for the generator training as well?  
 			latentw = mapping(z_vid[:,vae_cond_dim:])
 			_,txt_feat_relevant = preprocess_feat(txt_feat)
 			fake1 = G(video_sample, txt_feat_relevant, latentw)

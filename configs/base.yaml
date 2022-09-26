@@ -1,7 +1,7 @@
 project_title: VideoManipulation
 
 model:
-  base_learning_rate: 1.0e-4
+  base_learning_rate: 2.0e-5
   target: dicomogan.models.dicomogan.DiCoMOGAN
   project : "video-manipulation"
 

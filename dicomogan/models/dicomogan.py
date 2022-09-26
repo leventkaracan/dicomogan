@@ -117,14 +117,7 @@ class DiCoMOGAN(pl.LightningModule):
 
     def clip_encode_text(self, texts):
         text = clip.tokenize(texts).to(self.device)
-        tmp =  self.clip_model.encode_text(text)
-        tmp = tmp.float() # B x D
-        return tmp
-
-    def on_training_start(self):
-        for v in self.trainer.train_dataloaders:
-            v.sampler.shuffle = True
-            v.sampler.set_epoch(self.current_epoch)
+        return self.clip_model.encode_text(text).float()
 
     def training_step(self, batch, batch_idx, optimizer_idx=0):
         vid = batch['img'] # B x T x ch x H x W 
@@ -140,7 +133,7 @@ class DiCoMOGAN(pl.LightningModule):
         
         video_sample = vid # B x T x C x H x W 
         video_sample = video_sample.permute(1,0,2,3,4) # T x B x C x H x W 
-        video_sample = video_sample.contiguous().view(n_frames * bs, ch, height, width) # T*B x C x H x W 
+        video_sample = video_sample.contiguous().view(n_frames * bs, ch, height, width) # T*B x C x H x W // range [0,1]
         
         # downsample res for vae
         vid_rs_full = nn.functional.interpolate(video_sample, scale_factor=0.5, mode="bicubic", align_corners=False, recompute_scale_factor=True)
@@ -173,44 +166,43 @@ class DiCoMOGAN(pl.LightningModule):
 
             recon_loss = self.reconstruction_loss(vid_rs_full, x_recon, 'bernoulli')
             recon_lossT = self.reconstruction_loss(vid_rs_full, x_reconT, 'bernoulli')
-            self.log("train/recon_loss", recon_loss, prog_bar=True, logger=True, on_step=True, on_epoch=True)
-            self.log("train/recon_lossT", recon_lossT, prog_bar=False, logger=True, on_step=True, on_epoch=True)
+            self.log("train/recon_loss", recon_loss, prog_bar=True, logger=True, on_step=True, on_epoch=False)
+            self.log("train/recon_lossT", recon_lossT, prog_bar=False, logger=True, on_step=True, on_epoch=False)
 
             kl_loss_d = self.beta * self.kl_divergence(*mu_logvar_d)
             kl_loss_s = self.beta * self.kl_divergence(*mu_logvar_s)
             kl_loss = kl_loss_s +  kl_loss_d
-            self.log("train/kl_loss", kl_loss, prog_bar=True, logger=True, on_step=True, on_epoch=True)
+            self.log("train/kl_loss", kl_loss, prog_bar=True, logger=True, on_step=True, on_epoch=False)
 
             beta_vae_loss = 0.5 * (recon_loss + recon_lossT) +  kl_loss
-            self.log("train/beta_vae_loss", beta_vae_loss, prog_bar=False, logger=True, on_step=True, on_epoch=True)
-
-            
-            # TODO
-            # vid_vis = video_sample.reshape(4, bs, ch, height, width)
-            # rec_vis = x_recon.reshape( 4, bs, ch, height, width)
-            # save_image((vid_vis[:, 0].data), './examples/real/epoch_%d.png' % (epoch + 1))
-            # save_image((rec_vis[:, 0].data), './examples/recon/epoch_%d.png' % (epoch + 1))
+            self.log("train/beta_vae_loss", beta_vae_loss, prog_bar=False, logger=True, on_step=True, on_epoch=False)
 
 
-            # generator
+            #  generator loss
+
+            vid_norm = vid * 2 - 1 # range [-1, 1] to pass to the generator
+            video_sample = vid_norm
+            video_sample = video_sample.permute(1,0,2,3,4)
+            video_sample = video_sample.contiguous().view(bs * 4, ch, height, width)
+
             zsplits = torch.split(z_vid, int((bs * n_frames)/2), 0)
             z_rel = torch.cat((torch.roll(zsplits[0], -1, 0), zsplits[1]), 0)
 
             # calculate unsuper loss
-            def unsupervised_loss(fake, z_rel):
-                fake_rs = nn.functional.interpolate(fake, scale_factor=0.5, mode="bicubic", align_corners=False, recompute_scale_factor=True)
+            def unsupervised_loss(fake_sample, z_relative):
+                fake_rs = nn.functional.interpolate(fake_sample, scale_factor=0.5, mode="bicubic", align_corners=False, recompute_scale_factor=True)
                 fake_sample_rs = fake_rs.view(4, bs, ch, int(height*0.5), int(width*0.5))
                 fake_sample_rs = fake_sample_rs.permute(1,0,2,3,4)
                 zs_vid_fake, zd_vid_fake, mu_logvar_fake_s, mu_logvar_fake_d = self.bVAE_enc((fake_sample_rs+1)*0.5, ts)
                 z_vid_fake = torch.cat((zs_vid_fake, zd_vid_fake), 1)
-                return self.criterionUnsupFactor(z_vid_fake, z_rel)
+                return self.criterionUnsupFactor(z_vid_fake, z_relative)
 
-            def GAN_VGG_Unsup_loss(vid, text_feat, latentw):
-                fake = self.G(vid, text_feat, latentw)
-                fake_logit = self.D(fake, text_feat, latentw)
+            def GAN_VGG_Unsup_loss(video, text_feat, latnt, z_relative):
+                fake = self.G(video, text_feat, latnt) 
+                fake_logit = self.D(fake, text_feat, latnt)
                 gan_loss = self.criterionGAN(fake_logit, True)
-                vgg_loss = self.criterionVGG(fake, vid)
-                unsup_loss = unsupervised_loss(fake, z_rel)
+                vgg_loss = self.criterionVGG(fake, video)
+                unsup_loss = unsupervised_loss(fake, z_relative)
                 return gan_loss, vgg_loss, unsup_loss
 
 
@@ -218,26 +210,26 @@ class DiCoMOGAN(pl.LightningModule):
             _,txt_feat_relevant = self.preprocess_feat(txt_feat)
             _,latentw_relevant = self.preprocess_feat(latentw)
 
-            gan_loss1, vgg_loss1, unsup_loss1 = GAN_VGG_Unsup_loss(video_sample, txt_feat_relevant, latentw)
-            gan_loss2, vgg_loss2, unsup_loss2 = GAN_VGG_Unsup_loss(video_sample, txt_feat, latentw_relevant)
-            gan_loss3, vgg_loss3, unsup_loss3 = GAN_VGG_Unsup_loss(video_sample, txt_feat_relevant, latentw_relevant)
+            gan_loss1, vgg_loss1, unsup_loss1 = GAN_VGG_Unsup_loss(video_sample, txt_feat_relevant, latentw, z_rel)
+            gan_loss2, vgg_loss2, unsup_loss2 = GAN_VGG_Unsup_loss(video_sample, txt_feat, latentw_relevant, z_rel)
+            gan_loss3, vgg_loss3, unsup_loss3 = GAN_VGG_Unsup_loss(video_sample, txt_feat_relevant, latentw_relevant, z_rel)
 
             G_loss = gan_loss1 + gan_loss2 + gan_loss3
             vgg_loss = vgg_loss1 + vgg_loss2 + vgg_loss3
             unsup_loss = unsup_loss1 + unsup_loss2 + unsup_loss3
 
-            self.log("train/G_loss", G_loss, prog_bar=False, logger=True, on_step=True, on_epoch=True)
-            self.log("train/vgg_loss", vgg_loss, prog_bar=False, logger=True, on_step=True, on_epoch=True)
-            self.log("train/unsup_loss", unsup_loss, prog_bar=False, logger=True, on_step=True, on_epoch=True)
+            self.log("train/G_loss", G_loss, prog_bar=False, logger=True, on_step=True, on_epoch=False)
+            self.log("train/vgg_loss", vgg_loss, prog_bar=False, logger=True, on_step=True, on_epoch=False)
+            self.log("train/unsup_loss", unsup_loss, prog_bar=False, logger=True, on_step=True, on_epoch=False)
             
             total_loss = self.lambda_bvae * beta_vae_loss + self.lambda_G * G_loss + self.lambda_vgg * vgg_loss + self.lambda_unsup * unsup_loss
-            self.log("train/generator_loss", total_loss, prog_bar=False, logger=True, on_step=True, on_epoch=True)
+            self.log("train/generator_loss", total_loss, prog_bar=False, logger=True, on_step=True, on_epoch=False)
             return total_loss
             
         else:
             D_loss = 0
             # discriminator training
-            vid_norm = vid * 2 - 1
+            vid_norm = vid * 2 - 1 # range [-1, 1] to pass to the discriminator
             video_sample = vid_norm
             video_sample = video_sample.permute(1,0,2,3,4)
             video_sample = video_sample.contiguous().view(bs * 4, ch, height, width)
@@ -264,21 +256,27 @@ class DiCoMOGAN(pl.LightningModule):
             D_loss += Disc_loss(video_sample, txt_feat_mismatch, latentw_mismatch, False)
 
             # synthesized image with semantically relevant text
-            D_loss += Disc_loss(video_sample, txt_feat_relevant, latentw, False)
+            fake = self.G(video_sample, txt_feat_relevant, latentw)
+            D_loss += Disc_loss(fake.detach(), txt_feat_relevant, latentw, False)
 
             # synthesized image with semantically relevant vae
-            D_loss += Disc_loss(video_sample, txt_feat, latentw_relevant, False)
+            fake = self.G(video_sample, txt_feat, latentw_relevant)
+            D_loss += Disc_loss(fake.detach(), txt_feat, latentw_relevant, False)
 
             # synthesized image with semantically relevant text and vae
-            D_loss += Disc_loss(video_sample, txt_feat_relevant, latentw_relevant, False)
+            fake = self.G(video_sample, txt_feat_relevant, latentw_relevant)
+            D_loss += Disc_loss(fake.detach(), txt_feat_relevant, latentw_relevant, False)
 
-            self.log("train/D_loss", D_loss, prog_bar=True, logger=True, on_step=True, on_epoch=True)
+            self.log("train/D_loss", D_loss, prog_bar=True, logger=True, on_step=True, on_epoch=False)
             return self.lambda_D * D_loss
 
     def log_images(self, batch, split):
+        """
+        return a dictionary of tensors in the range [-1, 1]
+        """
         ret = dict()
 
-        vid = batch['img'] # B x T x ch x H x W 
+        vid = batch['img'] # B x T x ch x H x W -- range [0, 1]
         input_desc = batch['raw_desc'] 
         sampleT = batch['sampleT'] # B x T 
         assert torch.all(sampleT[0] == sampleT[np.random.randint(sampleT.size(0)-1)+1])
@@ -309,18 +307,18 @@ class DiCoMOGAN(pl.LightningModule):
         muT, logvarT = self.text_enc(txt_feat)
         zT = self.reparametrize(muT, logvarT) # T*B x D 
         
-        ret['image'] = vid_rs_full
-        ret['x_recon_vae_text'] = self.bVAE_dec(torch.cat((zT,z_vid[:, self.vae_cond_dim:]), 1)) # T*B x C x H x W
-        ret['x_recon_vae'] = self.bVAE_dec(z_vid) # T*B x C x H x W
+        ret['image'] = vid_rs_full * 2 - 1
+        ret['x_recon_vae_text'] = self.bVAE_dec(torch.cat((zT,z_vid[:, self.vae_cond_dim:]), 1)) * 2 - 1 # T*B x C x H x W
+        ret['x_recon_vae'] = self.bVAE_dec(z_vid) * 2 - 1 # T*B x C x H x W
 
         # generate with mathching text
         latentw = self.mapping(z_vid[:,self.vae_cond_dim:])
-        mismatch_txt_feat ,txt_feat_relevant = self.preprocess_feat(txt_feat)
-        mismatche_latentw ,latentw_relevant = self.preprocess_feat(latentw)
+        mismatch_txt_feat, txt_feat_relevant = self.preprocess_feat(txt_feat)
+        mismatche_latentw, latentw_relevant = self.preprocess_feat(latentw)
 
-        ret['x_recon_gan']  = self.G(video_sample, txt_feat, latentw)
-        ret['x_mismatch_text']  = self.G(video_sample, mismatch_txt_feat, latentw)
-        ret['x_mismatch_wcont']  = self.G(video_sample, txt_feat, mismatche_latentw)
+        ret['x_recon_gan']  = self.G(video_sample * 2 - 1, txt_feat, latentw)
+        ret['x_mismatch_text']  = self.G(video_sample * 2 - 1, mismatch_txt_feat, latentw)
+        ret['x_mismatch_wcont']  = self.G(video_sample * 2 - 1, txt_feat, mismatche_latentw)
 
         return ret
 
