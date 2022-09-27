@@ -70,19 +70,23 @@ data:
     batch_size: 12 # MUST Match batch size in dataset
     num_workers: 20
     train:
-      target: data.video.VideoDataFashion
+      target: dicomogan.data.new_video.VideoDataFashion # Changed from data.video.VideoDataFashion to data.new_video.VideoDataFashion
       params:
-        img_root: /userfiles/hpc-lkaracan/fashion_dataset/
-        n_frames_total : 4
+        video_list: data/fashion/fashion_train_videos.txt
+        img_root: /kuacc/users/abond19/datasets/aligned_fashion_dataset
+        # inversion_root: /kuacc/users/abond19/datasets/w+_fashion_dataset/fashion/PTI/
+        n_sampled_frames : 4
         batch_size : 12 #MUST match batch size 
         crop : [512, 384]
         size : [256, 192]
 
     validation:
-      target: data.video.VideoDataFashionTest
+      target: dicomogan.data.new_video.VideoDataFashion # Changed from data.video.VideoDataFashion to data.new_video.VideoDataFashion
       params:
-        img_root: /userfiles/hpc-lkaracan/fashion_dataset/
-        n_frames_total : 4
+        video_list: data/fashion/fashion_test_videos.txt
+        img_root: /kuacc/users/abond19/datasets/aligned_fashion_dataset
+        # inversion_root: /kuacc/users/abond19/datasets/w+_fashion_dataset/fashion/PTI/
+        n_sampled_frames : 4
         batch_size : 12 #MUST match batch size 
         crop : [512, 384]
         size : [256, 192]

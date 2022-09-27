@@ -77,13 +77,14 @@ class VideoDataFashion(data.Dataset):
 
     def __getitem__(self, index):
         # load text 
-        rnd_txt = np.random.randint(6)
+        rnd_txt = np.random.randint(len(self.desc_paths[index]))
         raw_desc = open(self.desc_paths[index][rnd_txt]).readlines()[0]
 
         # sample frames
         bin = index // self.batch_size
         local_state = np.random.RandomState(bin + 1)
-        sampleT = local_state.choice(self.frame_numbers[bin], self.n_sampled_frames, replace=False)
+        sampleT = local_state.choice(self.frame_numbers[bin][1:], self.n_sampled_frames-1, replace=False)
+        sampleT = np.append(sampleT, self.frame_numbers[bin][0])
         sampleT = np.sort(sampleT)
 
         I, W = None, None
@@ -98,7 +99,6 @@ class VideoDataFashion(data.Dataset):
                 assert self.data_paths[index][i][len(self.img_root):].split('.')[0] == self.data_paths[index][i][len(self.img_root):].split('.')[0], "inverstion does not matched image"
                 w_path = self.inversion_paths[index][i]
                 w_vec = self.get_inversion(w_path)
-                #w_vec = torch.unsqueeze(w_vec, 0)
                 W = w_vec if W is None else torch.cat([W, w_vec], dim=0)
         
         return_list = {'img': I, 'raw_desc': raw_desc, "sampleT": sampleT, "index": index}

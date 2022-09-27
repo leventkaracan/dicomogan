@@ -72,7 +72,6 @@ print("Random Seed: ", args.manualSeed)
 # if len(args.gpu_ids) > 0:
 # 	torch.cuda.set_device(args.gpu_ids[0])
 # 	torch.cuda.manual_seed_all(args.manualSeed)
-
 torch.cuda.set_device(0)
 
 

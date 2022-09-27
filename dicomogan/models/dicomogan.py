@@ -10,7 +10,7 @@ import torch.optim.lr_scheduler as lr_scheduler
 from torch.autograd import Variable
 import torchvision.transforms as transforms
 from torchvision.utils import save_image
-from dicomogan.losses.loss_lib import GANLoss, VGGLoss
+from dicomogan.losses.loss_lib import GANLoss, VGGLoss, HybridOptim
 import os
 from PIL import Image
 import random
@@ -134,6 +134,7 @@ class DiCoMOGAN(pl.LightningModule):
         video_sample = vid # B x T x C x H x W 
         video_sample = video_sample.permute(1,0,2,3,4) # T x B x C x H x W 
         video_sample = video_sample.contiguous().view(n_frames * bs, ch, height, width) # T*B x C x H x W // range [0,1]
+        video_sample_norm = video_sample * 2 - 1 # range [-1, 1] to pass to the generator and disc
         
         # downsample res for vae
         vid_rs_full = nn.functional.interpolate(video_sample, scale_factor=0.5, mode="bicubic", align_corners=False, recompute_scale_factor=True)
@@ -179,19 +180,13 @@ class DiCoMOGAN(pl.LightningModule):
 
 
             #  generator loss
-
-            vid_norm = vid * 2 - 1 # range [-1, 1] to pass to the generator
-            video_sample = vid_norm
-            video_sample = video_sample.permute(1,0,2,3,4)
-            video_sample = video_sample.contiguous().view(bs * n_frames, ch, height, width)
-
             zsplits = torch.split(z_vid, int((bs * n_frames)/2), 0)
             z_rel = torch.cat((torch.roll(zsplits[0], -1, 0), zsplits[1]), 0)
 
             # calculate unsuper loss
             def unsupervised_loss(fake_sample, z_relative):
                 fake_rs = nn.functional.interpolate(fake_sample, scale_factor=0.5, mode="bicubic", align_corners=False, recompute_scale_factor=True)
-                fake_sample_rs = fake_rs.view(4, bs, ch, int(height*0.5), int(width*0.5))
+                fake_sample_rs = fake_rs.view(n_frames, bs, ch, int(height*0.5), int(width*0.5))
                 fake_sample_rs = fake_sample_rs.permute(1,0,2,3,4)
                 zs_vid_fake, zd_vid_fake, mu_logvar_fake_s, mu_logvar_fake_d = self.bVAE_enc((fake_sample_rs+1)*0.5, ts)
                 z_vid_fake = torch.cat((zs_vid_fake, zd_vid_fake), 1)
@@ -210,9 +205,9 @@ class DiCoMOGAN(pl.LightningModule):
             _,txt_feat_relevant = self.preprocess_feat(txt_feat)
             _,latentw_relevant = self.preprocess_feat(latentw)
 
-            gan_loss1, vgg_loss1, unsup_loss1 = GAN_VGG_Unsup_loss(video_sample, txt_feat_relevant, latentw, z_rel)
-            gan_loss2, vgg_loss2, unsup_loss2 = GAN_VGG_Unsup_loss(video_sample, txt_feat, latentw_relevant, z_rel)
-            gan_loss3, vgg_loss3, unsup_loss3 = GAN_VGG_Unsup_loss(video_sample, txt_feat_relevant, latentw_relevant, z_rel)
+            gan_loss1, vgg_loss1, unsup_loss1 = GAN_VGG_Unsup_loss(video_sample_norm, txt_feat_relevant, latentw, z_rel)
+            gan_loss2, vgg_loss2, unsup_loss2 = GAN_VGG_Unsup_loss(video_sample_norm, txt_feat, latentw_relevant, z_rel)
+            gan_loss3, vgg_loss3, unsup_loss3 = GAN_VGG_Unsup_loss(video_sample_norm, txt_feat_relevant, latentw_relevant, z_rel)
 
             G_loss = (gan_loss1 + gan_loss2 + gan_loss3) / 3
             vgg_loss = (vgg_loss1 + vgg_loss2 + vgg_loss3) / 3
@@ -229,11 +224,6 @@ class DiCoMOGAN(pl.LightningModule):
         else:
             D_loss = 0
             # discriminator training
-            vid_norm = vid * 2 - 1 # range [-1, 1] to pass to the discriminator
-            video_sample = vid_norm
-            video_sample = video_sample.permute(1,0,2,3,4)
-            video_sample = video_sample.contiguous().view(bs * 4, ch, height, width)
-
             def Disc_loss(vid, txt_feat, latent, real):
                 logit = self.D(vid, txt_feat, latent)
                 return self.criterionGAN(logit, real)
@@ -244,27 +234,27 @@ class DiCoMOGAN(pl.LightningModule):
             latentw_mismatch, latentw_relevant = self.preprocess_feat(latentw)
 
             # real image with real latent)
-            D_loss += Disc_loss(video_sample, txt_feat, latentw, True)
+            D_loss += Disc_loss(video_sample_norm, txt_feat, latentw, True)
 
             # real image with mismatching text
-            D_loss += Disc_loss(video_sample, txt_feat_mismatch, latentw, False)
+            D_loss += Disc_loss(video_sample_norm, txt_feat_mismatch, latentw, False)
 
             # real image with mismatching vae
-            D_loss += Disc_loss(video_sample, txt_feat, latentw_mismatch, False)
+            D_loss += Disc_loss(video_sample_norm, txt_feat, latentw_mismatch, False)
 
             # real image with mismatching text and vae
-            D_loss += Disc_loss(video_sample, txt_feat_mismatch, latentw_mismatch, False)
+            D_loss += Disc_loss(video_sample_norm, txt_feat_mismatch, latentw_mismatch, False)
 
             # synthesized image with semantically relevant text
-            fake = self.G(video_sample, txt_feat_relevant, latentw)
+            fake = self.G(video_sample_norm, txt_feat_relevant, latentw)
             D_loss += Disc_loss(fake.detach(), txt_feat_relevant, latentw, False)
 
             # synthesized image with semantically relevant vae
-            fake = self.G(video_sample, txt_feat, latentw_relevant)
+            fake = self.G(video_sample_norm, txt_feat, latentw_relevant)
             D_loss += Disc_loss(fake.detach(), txt_feat, latentw_relevant, False)
 
             # synthesized image with semantically relevant text and vae
-            fake = self.G(video_sample, txt_feat_relevant, latentw_relevant)
+            fake = self.G(video_sample_norm, txt_feat_relevant, latentw_relevant)
             D_loss += Disc_loss(fake.detach(), txt_feat_relevant, latentw_relevant, False)
             
             D_loss /= 7 # normalize according to the number of samples
@@ -323,27 +313,41 @@ class DiCoMOGAN(pl.LightningModule):
 
         return ret
 
+
+
     # TODO: Check betas and epsilons of the optimizers
     def configure_optimizers(self):
         lr = self.learning_rate
-        params = list(self.bVAE_enc.parameters())+\
+        vae_params = list(self.bVAE_enc.parameters())+\
                  list(self.bVAE_dec.parameters())+\
-                 list(self.text_enc.parameters())+\
-                 list(self.G.parameters())+\
-                 list(self.mapping.parameters())
+                 list(self.text_enc.parameters())
 
-        opt_ae = torch.optim.Adam(params,
-                                  lr=lr, 
-                                  betas=(0.5, 0.99))
-        
-        
-        
+        G_params = list(self.G.parameters())
+
+        m_params = list(self.mapping.parameters())
+
         dis_params = list(self.D.parameters())
+
+        opt_vae = torch.optim.Adam(vae_params,
+                                  lr=lr * 5, 
+                                  betas=(0.9, 0.999))
+        
+        opt_g = torch.optim.Adam(G_params,
+                                  lr=lr, 
+                                  betas=(0.5, 0.999))
+        
+        opt_m = torch.optim.Adam(m_params,
+                                  lr=lr / 100, 
+                                  betas=(0.5, 0.999))
+
+        opt_ae = HybridOptim([opt_vae, opt_g, opt_m])
+        
         
         ae_ret = {"optimizer": opt_ae, "frequency": 1}
 
         ae_scheduler = None
         if self.scheduler_config is not None:
+            # TODO: scheduler not implemented
             ae_scheduler = LambdaLR(opt_ae, lr_lambda=instantiate_from_config(self.scheduler_config).schedule, verbose=False)
             ae_ret['lr_scheduler'] = {
                         'scheduler': ae_scheduler, 
@@ -354,6 +358,7 @@ class DiCoMOGAN(pl.LightningModule):
         
         disc_ret = {"optimizer": opt_disc, "frequency": 1}
         if self.scheduler_config is not None:
+            # TODO: scheduler not implemented
             dis_scheduler = LambdaLR(opt_disc, lr_lambda=instantiate_from_config(self.scheduler_config).schedule, verbose=False)
             disc_ret['lr_scheduler'] = {
                     'scheduler': dis_scheduler, 
