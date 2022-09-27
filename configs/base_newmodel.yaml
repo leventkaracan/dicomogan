@@ -65,7 +65,7 @@ model:
     generator_config:
       target: dicomogan.models.stylegan.StyleGAN2Generator
       params:
-        pkl_file: /kuacc/users/abond19/VideoEditing/dicomogan/StyleGAN_Human/ckpts/stylegan_human_v2_512.pkl
+        pkl_file: /kuacc/users/abond19/VideoEditing/dicomogan/StyleGAN_Human/ckpts/stylegan_human_v2_1024.pkl
     
     mapping_config:
       target: dicomogan.models.mapper.AttributeMapper
@@ -83,7 +83,7 @@ model:
 data:
   target: main.DataModuleFromConfig
   params:
-    batch_size: 2 # MUST Match batch size in dataset
+    batch_size: 1 # MUST Match batch size in dataset
     num_workers: 0
     train:
       target: dicomogan.data.new_video.VideoDataFashion # Changed from data.video.VideoDataFashion to data.new_video.VideoDataFashion
@@ -92,7 +92,7 @@ data:
         img_root: /userfiles/hpc-lkaracan/fashion_dataset/
         inversion_root: /kuacc/users/abond19/datasets/w+_fashion_dataset/fashion/PTI/
         n_sampled_frames : 4
-        batch_size : 2 #MUST match batch size 
+        batch_size : 1 #MUST match batch size 
         crop : [512, 384]
         size : [256, 192]
 
@@ -102,7 +102,7 @@ data:
         video_list: data/fashion/fashion_test_videos.txt
         img_root: /userfiles/hpc-lkaracan/fashion_dataset/
         inversion_root: /kuacc/users/abond19/datasets/w+_fashion_dataset/fashion/PTI/
-        n_sampled_frames : 4
+        n_sampled_frames : 1
         batch_size : 2 #MUST match batch size 
         crop : [512, 384]
         size : [256, 192]

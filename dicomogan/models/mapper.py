@@ -31,13 +31,19 @@ class ModulationModule(nn.Module):
         self.leakyrelu = nn.LeakyReLU()
 
     def forward(self, x, embedding, cut_flag):
+        # print(f"x before fc: {x.shape}")
+        # print(f"Embedding: {embedding.shape}")
         x = self.fc(x)
         x = self.norm(x) 	
         if cut_flag:
             return x
-        print(embedding.shape)
+        # print(embedding.shape)
         gamma = self.gamma_function(embedding.float())
         beta = self.beta_function(embedding.float())
+
+        # print(f"x: {x.shape}")
+        # print(f"gamma: {gamma.shape}")
+        # print(f"beta: {beta.shape}")
         out = x * (1 + gamma) + beta
         out = self.leakyrelu(out)
         return out
@@ -102,8 +108,10 @@ class AttributeMapper(nn.Module):
     
     # TODO: Figure out the input shape of x (unclear currently)
     def forward(self, x, attribute_vector):
-        print(x.shape)
-        print(attribute_vector.shape)
+        if attribute_vector.shape[1] != 1:
+            attribute_vector = attribute_vector.unsqueeze(1).repeat(1, 18, 1)
+
+
         x_coarse = x[:, :4, :]
         x_medium = x[:, 4:8, :]
         x_fine = x[:, 8:, :]
@@ -115,15 +123,15 @@ class AttributeMapper(nn.Module):
         
         # TODO: Remember to add coarse, medium, and fine cut flags to the opts
         if self.use_coarse_mapper:
-            x_coarse = self.coarse_mapping(x_coarse, attribute_vector, cut_flag=self.coarse_cut_flag)
+            x_coarse = self.coarse_mapping(x_coarse, attribute_vector[:, :4, :], cut_flag=self.coarse_cut_flag)
         else:
             x_coarse = torch.zeros_like(x_coarse)
         if self.use_medium_mapper:
-            x_medium = self.medium_mapping(x_medium, attribute_vector, cut_flag=self.medium_cut_flag)
+            x_medium = self.medium_mapping(x_medium, attribute_vector[:, 4:8, :], cut_flag=self.medium_cut_flag)
         else:
             x_medium = torch.zeros_like(x_medium)
         if self.use_fine_mapper:
-            x_fine = self.fine_mapping(x_fine, attribute_vector, cut_flag=self.fine_cut_flag)
+            x_fine = self.fine_mapping(x_fine, attribute_vector[:, 8:, :], cut_flag=self.fine_cut_flag)
         else:
             x_fine = torch.zeros_like(x_fine)
             
