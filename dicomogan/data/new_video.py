@@ -98,7 +98,7 @@ class VideoDataFashion(data.Dataset):
                 assert self.data_paths[index][i][len(self.img_root):].split('.')[0] == self.data_paths[index][i][len(self.img_root):].split('.')[0], "inverstion does not matched image"
                 w_path = self.inversion_paths[index][i]
                 w_vec = self.get_inversion(w_path)
-                w_vec = torch.unsqueeze(w_vec, 0)
+                #w_vec = torch.unsqueeze(w_vec, 0)
                 W = w_vec if W is None else torch.cat([W, w_vec], dim=0)
         
         return_list = {'img': I, 'raw_desc': raw_desc, "sampleT": sampleT, "index": index}
