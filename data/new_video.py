@@ -21,7 +21,7 @@ def is_image_file(filename):
     return any(filename.endswith(extension) for extension in IMG_EXTENSIONS)
 
 class VideoDataFashion(data.Dataset):
-    def __init__(self, img_root, inversion_path, align_path, n_frames_total, batch_size, img_transform=None, crop=(512, 384), size=(256, 192)):
+    def __init__(self, img_root, inversion_path, align_path, video_list, n_frames_total, batch_size, img_transform=None, crop=(512, 384), size=(256, 192)):
         super(VideoDataFashion, self).__init__()
         self.img_transform = img_transform
         if self.img_transform is None:
