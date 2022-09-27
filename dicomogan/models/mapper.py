@@ -4,13 +4,21 @@ from torchvision import transforms
 import numpy as np
 import clip
 from PIL import Image
-# TODO: Modify this import once we have included stylegan2 into the code
-#from models.stylegan2.model import EqualLinear, PixelNorm
+
+#TODO: Figure out why this code only works when batch size is 1
+
+# Taken from Rosinality StyleGAN2
+# https://github.com/rosinality/stylegan2-pytorch/blob/3dee637b8937bf3830991c066ed8d9cc58afd661/model.py
+class PixelNorm(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, input):
+        return input * torch.rsqrt(torch.mean(input ** 2, dim=1, keepdim=True) + 1e-8)
 
 
 # Taken from HairCLIP 
 # https://github.com/wty-ustc/HairCLIP/blob/main/mapper/latent_mappers.py
-# TODO: Change numbers as necessary, maybe use config file for this
 class ModulationModule(nn.Module):
     def __init__(self, layernum, attr_vec_dim):
         super(ModulationModule, self).__init__()
@@ -25,8 +33,9 @@ class ModulationModule(nn.Module):
     def forward(self, x, embedding, cut_flag):
         x = self.fc(x)
         x = self.norm(x) 	
-        if cut_flag == 1:
+        if cut_flag:
             return x
+        print(embedding.shape)
         gamma = self.gamma_function(embedding.float())
         beta = self.beta_function(embedding.float())
         out = x * (1 + gamma) + beta
@@ -34,23 +43,36 @@ class ModulationModule(nn.Module):
         return out
     
 class AttributeMapperModule(nn.Module):
-    def __init__(self, opts, layernum):
+    def __init__(self, attr_vec_dim, layernum):
         super(AttributeMapperModule, self).__init__()
-        self.opts = opts
         self.layernum = layernum
-        self.pixelnorm = nn.PixelNorm()
-        self.modulation_module_list = nn.ModuleList([ModulationModule(self.layernum, self.opts.attr_vec_dim) for i in range(5)])
+        self.pixelnorm = PixelNorm()
+        self.modulation_module_list = nn.ModuleList([ModulationModule(self.layernum, attr_vec_dim) for i in range(5)])
 
-    def forward(self, x, embedding, cut_flag=0):
+    def forward(self, x, embedding, cut_flag=False):
         x = self.pixelnorm(x)
         for modulation_module in self.modulation_module_list:
         	x = modulation_module(x, embedding, cut_flag)        
         return x
     
 class AttributeMapper(nn.Module):
-    def __init__(self, opts):
+    def __init__(self,
+                use_coarse_mapper,
+                use_medium_mapper,
+                use_fine_mapper,
+                coarse_cut_flag,
+                medium_cut_flag,
+                fine_cut_flag,
+                attr_vec_dim):
         super(AttributeMapper, self).__init__()
-        self.opts = opts
+        self.use_coarse_mapper = use_coarse_mapper
+        self.use_medium_mapper = use_medium_mapper
+        self.use_fine_mapper = use_fine_mapper
+        self.coarse_cut_flag = coarse_cut_flag
+        self.medium_cut_flag = medium_cut_flag
+        self.fine_cut_flag = fine_cut_flag
+
+        self.attr_vec_dim = attr_vec_dim
         
         # Original HairCLIP includes CLIP here
         # For the proposed attribute manipulation model, we don't need any CLIP model, so we can ignore it
@@ -60,12 +82,12 @@ class AttributeMapper(nn.Module):
         # Currently set to use 3 mappers (one for coarse, medium, and fine)
         # TODO: Compare these 3 with using one for each layer
         # TODO: Remember to pass the dimension of the attribute vector in opts
-        if not opts.no_coarse_mapper: 
-            self.coarse_mapping = AttributeMapperModule(opts, 4)
-        if not opts.no_medium_mapper:
-            self.medium_mapping = AttributeMapperModule(opts, 4)
-        if not opts.no_fine_mapper:
-            self.fine_mapping = AttributeMapperModule(opts, 10)
+        if self.use_coarse_mapper: 
+            self.coarse_mapping = AttributeMapperModule(self.attr_vec_dim, 4)
+        if self.use_medium_mapper:
+            self.medium_mapping = AttributeMapperModule(self.attr_vec_dim, 4)
+        if self.use_fine_mapper:
+            self.fine_mapping = AttributeMapperModule(self.attr_vec_dim, 10)
             
         # TODO Figure out use of this
         self.face_pool = nn.AdaptiveAvgPool2d((224, 224))
@@ -80,6 +102,8 @@ class AttributeMapper(nn.Module):
     
     # TODO: Figure out the input shape of x (unclear currently)
     def forward(self, x, attribute_vector):
+        print(x.shape)
+        print(attribute_vector.shape)
         x_coarse = x[:, :4, :]
         x_medium = x[:, 4:8, :]
         x_fine = x[:, 8:, :]
@@ -90,16 +114,16 @@ class AttributeMapper(nn.Module):
         #attribute_repeated = attribute_vector.unsqueeze(0).unsqueeze(0).repeat(A, B, 1)
         
         # TODO: Remember to add coarse, medium, and fine cut flags to the opts
-        if not self.opts.no_coarse_mapper:
-            x_coarse = self.coarse_mapping(x_coarse, attribute_vector, cut_flag=self.opts.coarse_cut_flag)
+        if self.use_coarse_mapper:
+            x_coarse = self.coarse_mapping(x_coarse, attribute_vector, cut_flag=self.coarse_cut_flag)
         else:
             x_coarse = torch.zeros_like(x_coarse)
-        if not self.opts.no_medium_mapper:
-            x_medium = self.medium_mapping(x_medium, attribute_vector, cut_flag=self.opts.medium_cut_flag)
+        if self.use_medium_mapper:
+            x_medium = self.medium_mapping(x_medium, attribute_vector, cut_flag=self.medium_cut_flag)
         else:
             x_medium = torch.zeros_like(x_medium)
-        if not self.opts.no_fine_mapper:
-            x_fine = self.fine_mapping(x_fine, attribute_vector, cut_flag=self.opts.fine_cut_flag)
+        if self.use_fine_mapper:
+            x_fine = self.fine_mapping(x_fine, attribute_vector, cut_flag=self.fine_cut_flag)
         else:
             x_fine = torch.zeros_like(x_fine)
             
