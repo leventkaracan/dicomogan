@@ -259,7 +259,7 @@ if __name__ == '__main__':
 			sampleT = np.insert(sampleT, 0, 0, axis=0) # Question: does it have to start with the first frame or it does not matter? We should always start with the first frame. We should have simialr motion in similar timestamps. TODO: fix that in my code 
 			sampleT = np.sort(sampleT)
 			#print(sampleT)
-			ts = (sampleT)*0.01 # Question: Why normalize ts? ODE training is problematic. Try different values. Research more about this
+			ts = (sampleT)*0.01 # Why normalize ts? ODE training is problematic. Try different values. TODO: research more about normalization for ts
 			#print(ts)
 			ts = torch.from_numpy(ts).cuda()
 			ts = ts - ts[0]
@@ -380,8 +380,7 @@ if __name__ == '__main__':
 			real_loss.backward(retain_graph=True)
 
 			# real image with mismatching text features -> Fake
-			# Question: Should we consider rolling the latent_w frame wise instead of batchwise?
-			latentw = mapping(z_vid[:,vae_cond_dim:]) # Question, why not using the previous latentw?
+			latentw = mapping(z_vid[:,vae_cond_dim:]) 
 			txt_feat_mismatch,_ = preprocess_feat(txt_feat)
 			real_m_logit = D(video_sample, txt_feat_mismatch, latentw)
 			real_m_loss = 0.5/3 * criterionGAN(real_m_logit,False)
@@ -540,7 +539,7 @@ if __name__ == '__main__':
 
 			avg_unsup_loss += 0.5 * unsup_loss.data.item()
 
-			# Question: Why not using direcitonal CLIP loss following HairCLIP? We can add it
+			# TODO: add CLIP loss
 			
 			G_loss = fake_loss1 + fake_loss2 + fake_loss3 + 1.0 * vgg_loss + 0.5 * unsup_loss
 			G_loss.backward()

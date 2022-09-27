@@ -350,14 +350,29 @@ class EncoderVideo_LatentODE(nn.Module):
         eps = std.data.new(std.size()).normal_()
         return mu + std*eps
 
-    def forward(self, x, t): # t (B x T)
-
+    def forward(self, x, t): # x: B x T x C x H x W , t: (B x T)
         batch_size = x.size(0)
         T = x.size(1)
         h = []
         zs = []
         mu_logvar_s=[]
-        # Question: hy the fwrames are processed independently. Can't they be reshaped and processed all together? TODO: We can combine them. No specific reason.
+
+        # xi = x.transpose(0, 1).view(T*batch_size, x.shape[2], x.shape[3], x.shape[4]) # T*B x C x H x W
+        # # Convolutional layers with ReLu activations
+        # xi = torch.relu(self.conv1(xi))
+        # xi = torch.relu(self.conv2(xi))
+        # xi = torch.relu(self.conv3(xi))
+        # if self.img_size[1] == self.img_size[2] == 64:
+        #     xi = torch.relu(self.conv_64(xi))
+        # elif self.img_size[1] == 128:
+        #     xi = torch.relu(self.conv_64(xi))
+        #     xi = torch.relu(self.conv_128(xi))
+        # # Fully connected layers with ReLu activations
+        # xi = xi.view((batch_size, -1))
+        # hi = torch.relu(self.lin1(xi))
+        # h = hi.view(T, batch_size, -1)  # T x B x D
+        
+        # Levent Implemetnation
         for i in range(T):
             xi = x[:,i]
         # Convolutional layers with ReLu activations
@@ -373,8 +388,8 @@ class EncoderVideo_LatentODE(nn.Module):
             xi = xi.view((batch_size, -1))
             hi = torch.relu(self.lin1(xi))
             h.append(hi)
-
         h = torch.stack(h) # T x B x D
+
         h_max = torch.max(h, dim=0)[0].unsqueeze(0) # B x D
         hs = h_max.repeat(T,1,1) # T x B x D
 

@@ -141,7 +141,7 @@ class DiCoMOGAN(pl.LightningModule):
         vid_rs = vid_rs.permute(1,0,2,3,4) # T x B x C x H//2 x W//2
 
         # encode text
-        txt_feat = self.clip_encode_text([*input_desc[0]])  # B x D
+        txt_feat = self.clip_encode_text(input_desc)  # B x D
         txt_feat = txt_feat.unsqueeze(0).repeat(n_frames,1,1)
         txt_feat = txt_feat.view(bs * n_frames, -1)  # T*B x D
 
@@ -297,7 +297,7 @@ class DiCoMOGAN(pl.LightningModule):
         vid_rs = vid_rs.permute(1,0,2,3,4) # T x B x C x H//2 x W//2
 
         # encode text
-        txt_feat = self.clip_encode_text([*input_desc[0]])  # B x D
+        txt_feat = self.clip_encode_text(input_desc)  # B x D
         txt_feat = txt_feat.unsqueeze(0).repeat(n_frames,1,1)
         txt_feat = txt_feat.view(bs * n_frames, -1)  # T*B x D
 
