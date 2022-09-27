@@ -255,10 +255,11 @@ if __name__ == '__main__':
 			# Question: is it alright to move sampling to the dataloader? 
 			sampleT = np.arange(T-1) + 1
 			sampleT = np.random.choice(sampleT, 3, replace= False)
-			sampleT = np.insert(sampleT, 0, 0, axis=0) # Question: does it have to start with the first frame or it does not matter?
+			# TODO: experiment first without ODE 
+			sampleT = np.insert(sampleT, 0, 0, axis=0) # Question: does it have to start with the first frame or it does not matter? We should always start with the first frame. We should have simialr motion in similar timestamps. TODO: fix that in my code 
 			sampleT = np.sort(sampleT)
 			#print(sampleT)
-			ts = (sampleT)*0.01 # Question: Why normalize ts?
+			ts = (sampleT)*0.01 # Question: Why normalize ts? ODE training is problematic. Try different values. Research more about this
 			#print(ts)
 			ts = torch.from_numpy(ts).cuda()
 			ts = ts - ts[0]
@@ -325,8 +326,6 @@ if __name__ == '__main__':
 
 
 			#print(video_sample.size())
-			# Question: This is an attempt from the to m make the first vae_cond_dim dimentions in the z_vid
-			# of the same distribtuion as the text? 
 			
 			recon_loss = reconstruction_loss(video_sample, x_recon, 'bernoulli')
 			recon_lossT = reconstruction_loss(video_sample, x_reconT, 'bernoulli')
@@ -418,7 +417,7 @@ if __name__ == '__main__':
 			fake_loss.backward(retain_graph=True)
 
 			# synthesized image with semantically relevant vae -> Fake
-			# Question: to obtain semantically relevant VAE, perhaps it would be better to roll frame-wise not batch wise
+			# Question: to obtain semantically relevant VAE, perhaps it would be better to roll frame-wise not batch wise? TODO: experiment with that
 			latentw = mapping(z_vid[:,vae_cond_dim:])
 			_,latentw_relevant = preprocess_feat(latentw)
 			fake = G(video_sample, txt_feat, latentw_relevant)
@@ -541,7 +540,7 @@ if __name__ == '__main__':
 
 			avg_unsup_loss += 0.5 * unsup_loss.data.item()
 
-			# Question: Why not using direcitonal CLIP loss following HairCLIP? 
+			# Question: Why not using direcitonal CLIP loss following HairCLIP? We can add it
 			
 			G_loss = fake_loss1 + fake_loss2 + fake_loss3 + 1.0 * vgg_loss + 0.5 * unsup_loss
 			G_loss.backward()

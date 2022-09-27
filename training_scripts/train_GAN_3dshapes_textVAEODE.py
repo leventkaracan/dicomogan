@@ -152,7 +152,7 @@ transforms.Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.2613025
 	bVAE_dec = Decoder((3,64,64), latent_dim=6)
 	text_enc = TextEncoder(512, latent_dim=3)
 	func = LatentODEfunc(1, 10) # Question: Why is it defined twice?
-	D = MultiscaleDiscriminatorPixpixHDMFMOD(input_nc=3, ndf=64, norm_layer=nn.InstanceNorm2d) # Question: why not using temporal discriminator?
+	D = MultiscaleDiscriminatorPixpixHDMFMOD(input_nc=3, ndf=64, norm_layer=nn.InstanceNorm2d) # Question: why not using temporal discriminator? We can add it later on
 	G = Generator2(fsize=64)
 	mapping = MappingNetworkVAE(input_dim=3, fsize=256)
 

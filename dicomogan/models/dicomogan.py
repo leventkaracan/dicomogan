@@ -214,9 +214,9 @@ class DiCoMOGAN(pl.LightningModule):
             gan_loss2, vgg_loss2, unsup_loss2 = GAN_VGG_Unsup_loss(video_sample, txt_feat, latentw_relevant, z_rel)
             gan_loss3, vgg_loss3, unsup_loss3 = GAN_VGG_Unsup_loss(video_sample, txt_feat_relevant, latentw_relevant, z_rel)
 
-            G_loss = gan_loss1 + gan_loss2 + gan_loss3
-            vgg_loss = vgg_loss1 + vgg_loss2 + vgg_loss3
-            unsup_loss = unsup_loss1 + unsup_loss2 + unsup_loss3
+            G_loss = (gan_loss1 + gan_loss2 + gan_loss3) / 3
+            vgg_loss = (vgg_loss1 + vgg_loss2 + vgg_loss3) / 3
+            unsup_loss = (unsup_loss1 + unsup_loss2 + unsup_loss3) / 3
 
             self.log("train/G_loss", G_loss, prog_bar=False, logger=True, on_step=True, on_epoch=False)
             self.log("train/vgg_loss", vgg_loss, prog_bar=False, logger=True, on_step=True, on_epoch=False)
@@ -266,7 +266,8 @@ class DiCoMOGAN(pl.LightningModule):
             # synthesized image with semantically relevant text and vae
             fake = self.G(video_sample, txt_feat_relevant, latentw_relevant)
             D_loss += Disc_loss(fake.detach(), txt_feat_relevant, latentw_relevant, False)
-
+            
+            D_loss /= 7 # normalize according to the number of samples
             self.log("train/D_loss", D_loss, prog_bar=True, logger=True, on_step=True, on_epoch=False)
             return self.lambda_D * D_loss
 

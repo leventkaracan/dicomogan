@@ -8,9 +8,10 @@ model:
   params:
     lambda_unsup: 1
     lambda_vgg: .333
-    lambda_G: .333
+    lambda_G: 1
     lambda_bvae: 1
-    lambda_D: .16666
+    lambda_D: 1
+
     vae_cond_dim : 8 # must match text encoder latent_dim
     beta: 8
     ODE_func_config:
