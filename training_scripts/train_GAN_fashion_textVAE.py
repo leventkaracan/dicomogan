@@ -450,7 +450,7 @@ transforms.Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.2613025
 			imgsplits = torch.split(video_sample, int((bs * 4)/2), 0)
 			img_rel = torch.cat((torch.roll(imgsplits[0], -1, 0), imgsplits[1]), 0)
 
-			# Question: does't make sense to add the mismatched text/ mismatched latent for the generator training as well?  
+			# Question: does't make sense to add the mismatched text/ mismatched latent for the generator training as well? No. txt_feat_relevant already has mismatched ones
 			latentw = mapping(z_vid[:,vae_cond_dim:])
 			_,txt_feat_relevant = preprocess_feat(txt_feat)
 			fake1 = G(video_sample, txt_feat_relevant, latentw)

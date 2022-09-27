@@ -332,7 +332,7 @@ class EncoderVideo_LatentODE(nn.Module):
         #self.lin2 = nn.Linear(hidden_dim, hidden_dim)
 
         # Fully connected layers for mean and variance
-        self.mu_logvar_gen_s = nn.Linear(hidden_dim, self.static_latent_dim * 2) # Questions How are we able to store anything in 1 of latent dimension
+        self.mu_logvar_gen_s = nn.Linear(hidden_dim, self.static_latent_dim * 2)
         self.mu_logvar_gen_d = nn.Linear(hidden_dim, self.dynamic_latent_dim * 2)
 
 
@@ -357,38 +357,40 @@ class EncoderVideo_LatentODE(nn.Module):
         zs = []
         mu_logvar_s=[]
 
-        # xi = x.transpose(0, 1).view(T*batch_size, x.shape[2], x.shape[3], x.shape[4]) # T*B x C x H x W
-        # # Convolutional layers with ReLu activations
-        # xi = torch.relu(self.conv1(xi))
-        # xi = torch.relu(self.conv2(xi))
-        # xi = torch.relu(self.conv3(xi))
-        # if self.img_size[1] == self.img_size[2] == 64:
-        #     xi = torch.relu(self.conv_64(xi))
-        # elif self.img_size[1] == 128:
-        #     xi = torch.relu(self.conv_64(xi))
-        #     xi = torch.relu(self.conv_128(xi))
-        # # Fully connected layers with ReLu activations
-        # xi = xi.view((batch_size, -1))
-        # hi = torch.relu(self.lin1(xi))
-        # h = hi.view(T, batch_size, -1)  # T x B x D
-        
-        # Levent Implemetnation
-        for i in range(T):
-            xi = x[:,i]
+        xi = x.permute(1, 0, 2, 3, 4).contiguous() # T x B x C x H x W
+        xi = xi.reshape(T*batch_size, x.shape[2], x.shape[3], x.shape[4]) # T*B x C x H x W
+
         # Convolutional layers with ReLu activations
-            xi = torch.relu(self.conv1(xi))
-            xi = torch.relu(self.conv2(xi))
-            xi = torch.relu(self.conv3(xi))
-            if self.img_size[1] == self.img_size[2] == 64:
-                xi = torch.relu(self.conv_64(xi))
-            elif self.img_size[1] == 128:
-                xi = torch.relu(self.conv_64(xi))
-                xi = torch.relu(self.conv_128(xi))
+        xi = torch.relu(self.conv1(xi))
+        xi = torch.relu(self.conv2(xi))
+        xi = torch.relu(self.conv3(xi))
+        if self.img_size[1] == self.img_size[2] == 64:
+            xi = torch.relu(self.conv_64(xi))
+        elif self.img_size[1] == 128:
+            xi = torch.relu(self.conv_64(xi))
+            xi = torch.relu(self.conv_128(xi))
         # Fully connected layers with ReLu activations
-            xi = xi.view((batch_size, -1))
-            hi = torch.relu(self.lin1(xi))
-            h.append(hi)
-        h = torch.stack(h) # T x B x D
+        xi = xi.view((T * batch_size, -1))
+        hi = torch.relu(self.lin1(xi))
+        h = hi.view(T, batch_size, -1)  # T x B x D
+        
+        # # # Levent Implemetnation
+        # for i in range(T):
+        #     xi = x[:,i]
+        # # Convolutional layers with ReLu activations
+        #     xi = torch.relu(self.conv1(xi))
+        #     xi = torch.relu(self.conv2(xi))
+        #     xi = torch.relu(self.conv3(xi))
+        #     if self.img_size[1] == self.img_size[2] == 64:
+        #         xi = torch.relu(self.conv_64(xi))
+        #     elif self.img_size[1] == 128:
+        #         xi = torch.relu(self.conv_64(xi))
+        #         xi = torch.relu(self.conv_128(xi))
+        # # Fully connected layers with ReLu activations
+        #     xi = xi.view((batch_size, -1))
+        #     hi = torch.relu(self.lin1(xi))
+        #     h.append(hi)
+        # h = torch.stack(h) # T x B x D
 
         h_max = torch.max(h, dim=0)[0].unsqueeze(0) # B x D
         hs = h_max.repeat(T,1,1) # T x B x D
@@ -416,12 +418,11 @@ class EncoderVideo_LatentODE(nn.Module):
 
         zd0 = self.reparametrize(mu_d0, logvar_d0) # B x D' (Where D' = 1 in our code :/)
 
-        # Question: t here is the time differences which might not be approperiate for the ODE solver
         zdt = odeint(self.odefunc,zd0,t,method='dopri5') # aren't we here solving the ODE jointly for all videos? Shouldn't we separate them?
         #print(zdt.size())
         zdt = zdt.view(batch_size * T, -1) # T*B x D 
 
-        # Question: why using hs and not h_max? Isn't redundent?
+        # Question: why using hs and not h_max? Isn't redundent? TODO: optimize later
         mu_logvars = self.mu_logvar_gen_s(hs.contiguous().view(batch_size * T, -1))
         mus, logvars = mu_logvars.view(-1, self.static_latent_dim, 2).unbind(-1) # T*B x D 
 

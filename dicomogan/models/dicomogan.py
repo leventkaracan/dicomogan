@@ -128,8 +128,8 @@ class DiCoMOGAN(pl.LightningModule):
         sampleT = sampleT[0] # B  --assumption: all batch['sampleT'] are the same
         n_frames = sampleT.shape[0]
         bs, T, ch, height, width = vid.size()
-        ts = (sampleT)*0.01
-        ts = ts - ts[0] # Question: if the first frame is not zero do we subtract?
+        ts = (sampleT) * 0.01
+        ts = ts - ts[0]
         
         video_sample = vid # B x T x C x H x W 
         video_sample = video_sample.permute(1,0,2,3,4) # T x B x C x H x W 
@@ -183,7 +183,7 @@ class DiCoMOGAN(pl.LightningModule):
             vid_norm = vid * 2 - 1 # range [-1, 1] to pass to the generator
             video_sample = vid_norm
             video_sample = video_sample.permute(1,0,2,3,4)
-            video_sample = video_sample.contiguous().view(bs * 4, ch, height, width)
+            video_sample = video_sample.contiguous().view(bs * n_frames, ch, height, width)
 
             zsplits = torch.split(z_vid, int((bs * n_frames)/2), 0)
             z_rel = torch.cat((torch.roll(zsplits[0], -1, 0), zsplits[1]), 0)
@@ -285,7 +285,7 @@ class DiCoMOGAN(pl.LightningModule):
         n_frames = sampleT.shape[0]
         bs, T, ch, height, width = vid.size()
         ts = (sampleT)*0.01
-        ts = ts - ts[0] # Question: if the first frame is not zero do we subtract?
+        ts = ts - ts[0] 
         
         video_sample = vid # B x T x C x H x W 
         video_sample = video_sample.permute(1,0,2,3,4) # T x B x C x H x W 
