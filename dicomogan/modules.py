@@ -357,7 +357,7 @@ class EncoderVideo_LatentODE(nn.Module):
         h = []
         zs = []
         mu_logvar_s=[]
-        # Question: why the frames are processed independently. Can't they be reshaped and processed all together
+        # Question: hy the fwrames are processed independently. Can't they be reshaped and processed all together? TODO: We can combine them. No specific reason.
         for i in range(T):
             xi = x[:,i]
         # Convolutional layers with ReLu activations
@@ -796,7 +796,7 @@ class Generator2(nn.Module):
 		self.encoder = nn.Sequential(
 			nn.ReflectionPad2d(3),
 			nn.Conv2d(3, fsize, 7, padding=0),
-			nn.InstanceNorm2d(fsize), # Question: why there is instance normalization in the encoder? 
+			nn.InstanceNorm2d(fsize), # Question: why there is instance normalization in the encoder? TODO: Check Pic2picHD model. 
 			nn.ReLU(inplace=True),
 
 			nn.Conv2d(fsize, fsize*2, kernel_size=3, stride=2, padding=1),
