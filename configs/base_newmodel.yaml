@@ -84,7 +84,7 @@ data:
   target: main.DataModuleFromConfig
   params:
     batch_size: 2 # MUST Match batch size in dataset
-    num_workers: 0
+    num_workers: 20
     train:
       target: dicomogan.data.new_video.VideoDataFashion # Changed from data.video.VideoDataFashion to data.new_video.VideoDataFashion
       params:

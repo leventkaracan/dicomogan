@@ -115,7 +115,7 @@ class VideoDataFashion(data.Dataset):
         return img
 
     def get_inversion(self, inversion_path):
-        w_vector = torch.load(inversion_path)
+        w_vector = torch.load(inversion_path, map_location='cpu')
         assert (w_vector.shape == (1, 18, 512)), "Inverted vector has incorrect shape"
         return w_vector
     

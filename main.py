@@ -6,11 +6,12 @@ warnings.filterwarnings("ignore")
 import os
 os.environ['WANDB_START_METHOD'] = 'thread'
 os.environ['TORCH_DISTRIBUTED_DEBUG'] = 'INFO'
+import torch
 import argparse, os, sys, datetime, glob, importlib
 from omegaconf import OmegaConf # Yaml hierarcichal config
 import numpy as np
 from PIL import Image
-import torch
+
 import torchvision
 from torch.utils.data import random_split, DataLoader, Dataset
 import pytorch_lightning as pl
@@ -494,6 +495,7 @@ class ImageLogger(Callback):
 
 
 if __name__ == "__main__":
+    # torch.multiprocessing.set_start_method('spawn', force=True)
     # custom parser to specify config files, train, test and debug mode,
     # postfix, resume.
     # `--key value` arguments are interpreted as arguments to the trainer.
