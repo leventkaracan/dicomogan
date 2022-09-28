@@ -140,6 +140,10 @@ class New_DiCoMOGAN(pl.LightningModule):
         n_frames = sampleT.shape[0]
         bs, T, ch, height, width = vid.size()
         
+        B, n_frames, n_channels, dim = inversions.shape
+        inversions = inversions.permute(1, 0, 2, 3)
+        inversions = inversions.contiguous().reshape(B * n_frames, n_channels, dim)
+
         video_sample = vid # B x T x C x H x W 
         video_sample = video_sample.permute(1,0,2,3,4) # T x B x C x H x W 
         video_sample = video_sample.contiguous().view(n_frames * bs, ch, height, width) # T*B x C x H x W // range [0,1]
@@ -151,9 +155,6 @@ class New_DiCoMOGAN(pl.LightningModule):
         txt_feat = txt_feat.view(bs * n_frames, -1) # T * B x D
         
         txt_feat_mismatch, _ = self.preprocess_feat(txt_feat)
-        B, n_frames, n_channels, dim = inversions.shape
-        
-        inversions = inversions.reshape(B * n_frames, n_channels, dim)
         adjusted_latent = inversions + self.mapping_network(inversions, txt_feat)
         adjusted_mismatched_latent = inversions + self.mapping_network(inversions, txt_feat_mismatch)
 
