@@ -1,20 +1,19 @@
+
+import sys 
+sys.path.append('StyleGAN_Human')
+sys.path.append('.')
+
 import torch.nn as nn
 import torch
 import numpy as np
-import legacy
 from StyleGAN_Human import dnnlib, legacy
 import os
-import sys
 
 class StyleGAN2Generator(nn.Module):
     def __init__(self, pkl_file):
         super().__init__()
-        #current_dir = os.getcwd()
-        #os.chdir('StyleGAN_Human')
-        sys.path.append('StyleGAN_Human')
         with dnnlib.util.open_url(pkl_file) as f:
             self.G = legacy.load_network_pkl(f)['G_ema']
-        #os.chdir(current_dir)
     
     def forward(self, w):
         return self.G.synthesis(w, noise_mode='const', force_fp32=True)

@@ -28,16 +28,18 @@ class VideoDataFashion(data.Dataset):
     def __init__(self, video_list, img_root, n_sampled_frames, 
                     batch_size, img_transform=None, 
                     inversion_root=None,
-                    crop=(512, 384), size=(256, 192)):
+                    crop=None, size=None):
                     
         super(VideoDataFashion, self).__init__()
         self.img_transform = img_transform
         if self.img_transform is None:
-            self.img_transform=transforms.Compose([
-                          transforms.CenterCrop(tuple(crop)),
-                          transforms.Resize(tuple(size)),
-                          transforms.ToTensor()
-                      ])
+            trans_list = []
+            if crop is not None:
+                trans_list.append(transforms.CenterCrop(tuple(crop)))
+            if size is not None:
+                trans_list.append(transforms.Resize(tuple(size)))
+            trans_list.append(transforms.ToTensor())
+            self.img_transform=transforms.Compose(trans_list)
         
         self.img_root = img_root
         self.video_list = open(video_list).readlines()

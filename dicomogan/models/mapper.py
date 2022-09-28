@@ -96,15 +96,15 @@ class AttributeMapper(nn.Module):
             self.fine_mapping = AttributeMapperModule(self.attr_vec_dim, 10)
             
         # TODO Figure out use of this
-        self.face_pool = nn.AdaptiveAvgPool2d((224, 224))
-        self.transform = transforms.Compose([transforms.Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711))])
+        # self.face_pool = nn.AdaptiveAvgPool2d((224, 224))
+        # self.transform = transforms.Compose([transforms.Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711))])
         
             
     # TODO: Figure out why preprocess is a parameter here if we never use it?
-    def gen_image_embedding(self, img_tensor, clip_model, preprocess):
-        masked_generated = self.face_pool(img_tensor)
-        masked_generated_renormed = self.transform(masked_generated * 0.5 + 0.5)
-        return clip_model.encode_image(masked_generated_renormed)
+    # def gen_image_embedding(self, img_tensor, clip_model, preprocess):
+    #     masked_generated = self.face_pool(img_tensor)
+    #     masked_generated_renormed = self.transform(masked_generated * 0.5 + 0.5)
+    #     return clip_model.encode_image(masked_generated_renormed)
     
     # TODO: Figure out the input shape of x (unclear currently)
     def forward(self, x, attribute_vector):

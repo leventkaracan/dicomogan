@@ -1,7 +1,7 @@
 project_title: VideoManipulation
 
 model:
-  base_learning_rate: 2.0e-5
+  base_learning_rate: 2.0e-6
   target: dicomogan.models.new_dicomogan.New_DiCoMOGAN
   project : "video-manipulation"
 
@@ -70,10 +70,10 @@ model:
     mapping_config:
       target: dicomogan.models.mapper.AttributeMapper
       params:
-        use_coarse_mapper: True
+        use_coarse_mapper: False
         use_medium_mapper: True
         use_fine_mapper: True
-        coarse_cut_flag: True # Since the coarse mapper only handles pose, we don't want to do any modulation
+        coarse_cut_flag: False # Since the coarse mapper only handles pose, we don't want to do any modulation
         medium_cut_flag: False
         fine_cut_flag: False
         attr_vec_dim: 512
@@ -83,28 +83,28 @@ model:
 data:
   target: main.DataModuleFromConfig
   params:
-    batch_size: 1 # MUST Match batch size in dataset
+    batch_size: 2 # MUST Match batch size in dataset
     num_workers: 0
     train:
       target: dicomogan.data.new_video.VideoDataFashion # Changed from data.video.VideoDataFashion to data.new_video.VideoDataFashion
       params:
         video_list: data/fashion/fashion_train_videos.txt
-        img_root: /userfiles/hpc-lkaracan/fashion_dataset/
+        img_root: /kuacc/users/abond19/datasets/aligned_fashion_dataset
         inversion_root: /kuacc/users/abond19/datasets/w+_fashion_dataset/fashion/PTI/
         n_sampled_frames : 4
-        batch_size : 1 #MUST match batch size 
-        crop : [512, 384]
+        batch_size : 2 #MUST match batch size 
+        # crop : [512, 384]
         size : [256, 192]
 
     validation:
       target: dicomogan.data.new_video.VideoDataFashion # Changed from data.video.VideoDataFashion to data.new_video.VideoDataFashion
       params:
         video_list: data/fashion/fashion_test_videos.txt
-        img_root: /userfiles/hpc-lkaracan/fashion_dataset/
+        img_root: /kuacc/users/abond19/datasets/aligned_fashion_dataset
         inversion_root: /kuacc/users/abond19/datasets/w+_fashion_dataset/fashion/PTI/
-        n_sampled_frames : 1
+        n_sampled_frames : 4
         batch_size : 2 #MUST match batch size 
-        crop : [512, 384]
+        # crop : [512, 384]
         size : [256, 192]
 
 
@@ -112,9 +112,3 @@ lightning:
   trainer:
     limit_val_batches : 2
     replace_sampler_ddp : False
-
-  modelcheckpoint:
-    params:
-      monitor : 'clip/val/clip_loss'
-      save_top_k : 1
-    

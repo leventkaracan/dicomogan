@@ -77,7 +77,7 @@ data:
         # inversion_root: /kuacc/users/abond19/datasets/w+_fashion_dataset/fashion/PTI/
         n_sampled_frames : 4
         batch_size : 12 #MUST match batch size 
-        crop : [512, 384]
+        # crop : [512, 384]
         size : [256, 192]
 
     validation:
@@ -88,7 +88,7 @@ data:
         # inversion_root: /kuacc/users/abond19/datasets/w+_fashion_dataset/fashion/PTI/
         n_sampled_frames : 4
         batch_size : 12 #MUST match batch size 
-        crop : [512, 384]
+        # crop : [512, 384] 
         size : [256, 192]
 
 
