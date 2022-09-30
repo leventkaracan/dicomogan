@@ -10,6 +10,7 @@ import pickle
 import torchvision.transforms.functional as func
 import random
 import glob
+import yaml
 
 IMG_EXTENSIONS = ['.png', '.PNG']
 TXT_EXTENSIONS = ['.txt']
@@ -28,7 +29,9 @@ class VideoDataFashion(data.Dataset):
     def __init__(self, video_list, img_root, n_sampled_frames, 
                     batch_size, img_transform=None, 
                     inversion_root=None,
-                    crop=None, size=None):
+                    attribute = None,
+                    crop=None, size=None, onehot=True,
+                    attribute_stats = 'data/fashion/attributes_stats.yaml'):
                     
         super(VideoDataFashion, self).__init__()
         self.img_transform = img_transform
@@ -46,12 +49,18 @@ class VideoDataFashion(data.Dataset):
         self.inversion_root = inversion_root
         self.n_sampled_frames = n_sampled_frames   
         self.batch_size = batch_size
-        self.data_paths, self.inversion_paths, self.desc_paths, self.frame_numbers = self._load_dataset()        
+        self.attribute = attribute
+        self.onehot = onehot
+        if self.attribute is not None:
+            self.attribute_stats = self.load_yaml(attribute_stats)
+
+        self.data_paths, self.inversion_paths, self.desc_paths, self.frame_numbers, self.attributes = self._load_dataset()        
 
     def _load_dataset(self):
-        data_paths, inversion_paths, desc_paths, frame_numbers = [], [], [], []
+        data_paths, inversion_paths, desc_paths, frame_numbers, attributes = [], [], [], [], []
         intersection = None
-        for idx, vid_path in enumerate(self.video_list):
+        from tqdm import tqdm
+        for idx, vid_path in tqdm(enumerate(self.video_list)):
             paths, i_paths, d_paths, f_nums = [], [], [], []
             fname = vid_path[:-1]
             for f in sorted(os.listdir(os.path.join(self.img_root, fname))):
@@ -65,6 +74,15 @@ class VideoDataFashion(data.Dataset):
                 elif is_text_file(f):
                     d_paths.append(os.path.join(self.img_root, fname, f))
             
+            if self.attribute is not None:
+                att_path = os.path.join(self.img_root, fname, 'attributes.yaml')
+                assert os.path.exists(att_path), f"attribute file does not exists for video {att_path}"
+                attr = self.load_yaml(att_path)
+                attr = attr[self.attribute]
+                if self.to_onehot:
+                    attr = self.to_onehot(self.attribute, attr)
+                attributes.append(attr)
+            
             data_paths.append(sorted(paths))
             inversion_paths.append(sorted(i_paths))
             desc_paths.append(sorted(d_paths))
@@ -75,12 +93,25 @@ class VideoDataFashion(data.Dataset):
 
         if intersection is not None:
             frame_numbers.append(sorted(list(intersection)))
-        return data_paths, inversion_paths, desc_paths, frame_numbers
+        return data_paths, inversion_paths, desc_paths, frame_numbers, attributes
+
+    
+    def to_onehot(self, attr, val):
+        ret = np.zeros(len(self.attribute_stats[attr]))
+        ret[self.attribute_stats[attr].index(val)] = 1
+        return ret
+    
+    def load_yaml(self, file):
+        with open(file, 'r') as f:
+            return yaml.safe_load(f)
 
     def __getitem__(self, index):
         # load text 
         rnd_txt = np.random.randint(len(self.desc_paths[index]))
         raw_desc = open(self.desc_paths[index][rnd_txt]).readlines()[0]
+
+        # load attribute
+        attribute = self.attributes[index]
 
         # sample frames
         bin = index // self.batch_size
@@ -103,7 +134,7 @@ class VideoDataFashion(data.Dataset):
                 w_vec = self.get_inversion(w_path)
                 W = w_vec if W is None else torch.cat([W, w_vec], dim=0)
         
-        return_list = {'img': I, 'raw_desc': raw_desc, "sampleT": sampleT, "index": index}
+        return_list = {'img': I, 'raw_desc': raw_desc, "sampleT": sampleT, "attribute" : attribute, "index": index}
         if W is not None:
             return_list['inversion'] = W
 
@@ -126,4 +157,4 @@ class VideoDataFashion(data.Dataset):
         return 'VideoDataFashion'
     
 
-# TODO: Add the modifications for the test dataset as well
+

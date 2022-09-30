@@ -47,6 +47,8 @@ data:
         batch_size : 3 #MUST match batch size 
         # crop : [512, 384]
         size : [256, 192]
+        attribute : "Color"
+        attribute_stats : 'data/fashion/attributes_stats.yaml'
 
     validation:
       target: dicomogan.data.new_video.VideoDataFashion # Changed from data.video.VideoDataFashion to data.new_video.VideoDataFashion
@@ -58,6 +60,8 @@ data:
         batch_size : 3 #MUST match batch size 
         # crop : [512, 384]
         size : [256, 192]
+        attribute : "Color"
+        attribute_stats : 'data/fashion/attributes_stats.yaml'
 
 
 lightning:
