@@ -33,6 +33,26 @@ def reverse(tensor):
 	idx = [i for i in range(tensor.size(0)-1, -1, -1)]
 	return tensor[idx]
 
+class ProjNetwork(nn.Module):
+    def __init__(self, in_dim, out_dim, hidden_dim=512, n_hidden_layers=1):
+        super(ProjNetwork, self).__init__()
+        assert (n_hidden_layers > 0), "Need to have a positive number of layers"
+        
+        module_list = []
+        module_list.append(nn.Linear(in_dim, hidden_dim))
+
+        for i in range(n_hidden_layers):
+            module_list.append(nn.ReLU())
+            module_list.append(nn.Linear(hidden_dim, hidden_dim))
+        
+        module_list.append(nn.ReLU())
+        module_list.append(nn.Linear(hidden_dim, out_dim))
+
+        self.net = nn.Sequential(*module_list)
+
+    def forward(self, x):
+        return self.net(x)
+
 
 class Encoder(nn.Module):
     def __init__(self, img_size,

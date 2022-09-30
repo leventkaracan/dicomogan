@@ -6,6 +6,13 @@ from dicomogan.modules import Vgg19
 from torchvision.utils import save_image
 from torch.nn import functional as F
 
+def cosine_similarity(A, B):
+    with torch.no_grad():
+        A_norm, B_norm = torch.norm(A).cpu().item(), torch.norm(B).cpu().item()
+        if A_norm == 0 or B_norm == 0:
+            return 0
+        return torch.dot(A, B) / (A_norm * B_norm)
+
 def pairwise_ranking_loss(margin, x, v):
 	zero = torch.zeros(1)
 	diag_margin = margin * torch.eye(x.size(0))
