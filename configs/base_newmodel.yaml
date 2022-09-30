@@ -6,61 +6,12 @@ model:
   project : "video-manipulation"
 
   params:
-    #lambda_unsup: 1
-    #lambda_vgg: .333
-    lambda_G: .333
-    #lambda_bvae: 1
-    #lambda_D: .16666
-    #vae_cond_dim : 8 # must match text encoder latent_dim
-    #beta: 8
-
-    # ODE_func_config:
-    #   target: dicomogan.modules.LatentODEfunc
-    #   params:
-    #     latent_dim : 4 # must match dynamic_latent_dim
-    #     nhidden : 20 
-
-    # video_ecnoder_config:
-    #   target: dicomogan.modules.EncoderVideo_LatentODE
-    #   params:
-    #     img_size : [3,128,96] # must match video_decoder
-    #     static_latent_dim : 12
-    #     dynamic_latent_dim : 4 # must match ODE_func_config latent_dim
-    #     hid_channels : 32 
-    #     kernel_size : 4
-    #     hidden_dim : 256
-
-    # video_decoder_config:
-    #   target: dicomogan.modules.Decoder
-    #   params:
-    #     img_size : [3,128,96] # must match video_encoder
-    #     latent_dim : 16 # should match static_latent_dim + dynamic_latent_dim
-
-    # text_encoder_config:
-    #   target: dicomogan.modules.TextEncoder
-    #   params:
-    #     text_size : 512
-    #     latent_dim : 8 # must match vae_cond_enc
-
-    # discriminator_config:
-    #   target: dicomogan.modules.MultiscaleDiscriminatorPixpixHDMFMOD
-    #   params:
-    #     input_nc: 3
-    #     ndf : 64
-    #     n_layers : 3
-    #     use_sigmoid : False
-    #     num_D : 3
-
-    # generator_config:
-    #   target: dicomogan.modules.Generator2
-    #   params:
-    #     fsize : 64
-
-    # mapping_config:
-    #   target: dicomogan.modules.MappingNetworkVAE
-    #   params:
-    #     input_dim : 8 # must match dynamic_latent + (static_latent - text_latent)
-    #     fsize : 256
+    # tgt_text : 'Yellow Dresses Made from polyester with V-neckline. The dress is all over ribbed and has front buttons and is short sleeves. The dress is regular fit'
+    delta_inversion_weight : 0.05
+    rec_loss_lambda : 1.0
+    l2_latent_lambda : 0.5
+    clip_loss_lambda : 5.0
+    l2_latent_eps : 0.01
 
     generator_config:
       target: dicomogan.models.stylegan.StyleGAN2Generator
@@ -70,10 +21,11 @@ model:
     mapping_config:
       target: dicomogan.models.mapper.AttributeMapper
       params:
-        use_coarse_mapper: False
+        predict_delta: False
+        use_coarse_mapper: True # Since the coarse mapper only handles pose, we don't want to do any modulation
         use_medium_mapper: True
         use_fine_mapper: True
-        coarse_cut_flag: False # Since the coarse mapper only handles pose, we don't want to do any modulation
+        coarse_cut_flag: False 
         medium_cut_flag: False
         fine_cut_flag: False
         attr_vec_dim: 512
@@ -83,16 +35,16 @@ model:
 data:
   target: main.DataModuleFromConfig
   params:
-    batch_size: 2 # MUST Match batch size in dataset
-    num_workers: 20
+    batch_size: 3 # MUST Match batch size in dataset
+    num_workers: 10
     train:
       target: dicomogan.data.new_video.VideoDataFashion # Changed from data.video.VideoDataFashion to data.new_video.VideoDataFashion
       params:
         video_list: data/fashion/fashion_train_videos.txt
-        img_root: /kuacc/users/abond19/datasets/aligned_fashion_dataset
+        img_root: /kuacc/users/abond19/datasets/inverted_fashion_dataset
         inversion_root: /kuacc/users/abond19/datasets/w+_fashion_dataset/fashion/PTI/
-        n_sampled_frames : 4
-        batch_size : 2 #MUST match batch size 
+        n_sampled_frames : 3
+        batch_size : 3 #MUST match batch size 
         # crop : [512, 384]
         size : [256, 192]
 
@@ -100,10 +52,10 @@ data:
       target: dicomogan.data.new_video.VideoDataFashion # Changed from data.video.VideoDataFashion to data.new_video.VideoDataFashion
       params:
         video_list: data/fashion/fashion_test_videos.txt
-        img_root: /kuacc/users/abond19/datasets/aligned_fashion_dataset
+        img_root: /kuacc/users/abond19/datasets/inverted_fashion_dataset
         inversion_root: /kuacc/users/abond19/datasets/w+_fashion_dataset/fashion/PTI/
-        n_sampled_frames : 4
-        batch_size : 2 #MUST match batch size 
+        n_sampled_frames : 3
+        batch_size : 3 #MUST match batch size 
         # crop : [512, 384]
         size : [256, 192]
 

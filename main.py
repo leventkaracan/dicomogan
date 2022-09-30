@@ -712,7 +712,7 @@ if __name__ == "__main__":
             "image_logger": {
                 "target": "main.ImageLogger",
                 "params": {
-                    "batch_frequency": 100000000, # 750
+                    "batch_frequency": 250, # 750
                     "max_images": 16,
                     "clamp": True
                 }

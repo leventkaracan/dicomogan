@@ -23,9 +23,14 @@ class New_DiCoMOGAN(pl.LightningModule):
     def __init__(self,
                 generator_config,
                 mapping_config,
-                lambda_G,
                 scheduler_config = None,
                 custom_loggers = None,
+                delta_inversion_weight = 0.05,
+                rec_loss_lambda=1.0,
+                l2_latent_lambda=1.0,
+                clip_loss_lambda=1.0,
+                l2_latent_eps = 1.0,
+                tgt_text = None,
                 n_critic = 1):
         super(New_DiCoMOGAN, self).__init__()
 
@@ -34,8 +39,6 @@ class New_DiCoMOGAN(pl.LightningModule):
                     transforms.CenterCrop(224), 
                     transforms.Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711))])
 
-        self.lambda_G = lambda_G
-
         # Intializing networks
         self.G = instantiate_from_config(generator_config)
         self.mapping_network = instantiate_from_config(mapping_config)
@@ -43,10 +46,24 @@ class New_DiCoMOGAN(pl.LightningModule):
         self.G.eval()
         self.requires_grad(self.G, False)
         
+        # lambdas
+        self.rec_loss_lambda = rec_loss_lambda
+        self.l2_latent_lambda = l2_latent_lambda
+        self.clip_loss_lambda = clip_loss_lambda
+        self.delta_inversion_weight = delta_inversion_weight
+        self.l2_latent_eps = l2_latent_eps
+
         # Losses
         self.reconstruction_loss = nn.MSELoss()
+        self.l2_latent_loss = nn.MSELoss()
         self.directional_clip_loss = CLIPLoss()
+        self.criterionVGG = VGGLoss()
         
+        self.tgt_text_embed = None
+        if tgt_text is not None:
+            self.tgt_text_embed = self.get_text_embedding([tgt_text]) # 1 x 512
+            self.tgt_text_embed.requires_grad = False
+
         self.scheduler_config = scheduler_config
         
     def requires_grad(self, model, flag=True):
@@ -56,13 +73,25 @@ class New_DiCoMOGAN(pl.LightningModule):
     def get_text_embedding(self, description):
         return self.directional_clip_loss.encode_text(self.directional_clip_loss.tokenize(description))
     
-    def preprocess_feat(self, latent_feat):
-        latent_feat = latent_feat.clone()
+    def preprocess_text_feat(self, latent_feat):
         bs = int(latent_feat.size(0)/2)
-        latent_feat_mismatch = torch.roll(latent_feat, 1, 0)
-        latent_splits = torch.split(latent_feat, bs, 0)
-        latent_feat_relevant = torch.cat((torch.roll(latent_splits[0], -1, 0), latent_splits[1]), 0)
+        if self.tgt_text_embed is not None:
+            self.tgt_text_embed = self.tgt_text_embed.to(latent_feat.device)
+            latent_feat_mismatch = self.tgt_text_embed.repeat(latent_feat.size(0), 1)
+            latent_splits = torch.split(latent_feat, bs, 0)
+            latent_feat_relevant = torch.cat((self.tgt_text_embed.repeat(bs, 1), latent_splits[1]), 0)
+        else:
+            latent_feat_mismatch = torch.roll(latent_feat, 1, 0)
+            latent_splits = torch.split(latent_feat, bs, 0)
+            latent_feat_relevant = torch.cat((torch.roll(latent_splits[0], -1, 0), latent_splits[1]), 0)
         return latent_feat_mismatch, latent_feat_relevant
+
+    # def preprocess_feat(self, latent_feat):
+    #     bs = int(latent_feat.size(0)/2)
+    #     latent_feat_mismatch = torch.roll(latent_feat, 1, 0)
+    #     latent_splits = torch.split(latent_feat, bs, 0)
+    #     latent_feat_relevant = torch.cat((torch.roll(latent_splits[0], -1, 0), latent_splits[1]), 0)
+    #     return latent_feat_mismatch, latent_feat_relevant
     
     def training_step(self, batch, batch_idx, optimizer_idx=0):
         vid = batch['img']
@@ -86,12 +115,12 @@ class New_DiCoMOGAN(pl.LightningModule):
         txt_feat = txt_feat.unsqueeze(0).repeat(n_frames, 1, 1) # T x B x D
         txt_feat = txt_feat.view(bs * n_frames, -1) # T * B x D
         
-        txt_feat_mismatch, _ = self.preprocess_feat(txt_feat)
+        txt_feat_mismatch, _ = self.preprocess_text_feat(txt_feat)
         B, n_frames, n_channels, dim = inversions.shape
         
         inversions = inversions.reshape(B * n_frames, n_channels, dim)
-        adjusted_latent = inversions + self.mapping_network(inversions, txt_feat)
-        adjusted_mismatched_latent = inversions + self.mapping_network(inversions, txt_feat_mismatch)
+        adjusted_latent = inversions + self.delta_inversion_weight * self.mapping_network(inversions, txt_feat)
+        adjusted_mismatched_latent = inversions + self.delta_inversion_weight * self.mapping_network(inversions, txt_feat_mismatch)
 
         mismatched_img = self.G(adjusted_mismatched_latent) #.reshape(bs * T, ch, height, width)
         reconstructed = self.G(adjusted_latent) #.reshape(bs * T, ch, height, width)
@@ -101,10 +130,15 @@ class New_DiCoMOGAN(pl.LightningModule):
         
         reconstruction_loss = self.reconstruction_loss(reconstructed, video_sample_norm)
         directional_clip_loss = self.directional_clip_loss(video_sample_norm, txt_feat, mismatched_img, txt_feat_mismatch, self.global_step)
+        latent_loss = self.l2_latent_loss(inversions, adjusted_latent)
+        latent_loss += torch.maximum(self.l2_latent_loss(inversions, adjusted_mismatched_latent) - self.l2_latent_eps, torch.zeros(1).to(inversions.device)[0])
+        vgg_loss = self.criterionVGG(reconstructed, video_sample_norm)
         
-        self.log("train/rl_loss", reconstruction_loss, prog_bar=True, logger=True, on_step=True, on_epoch=False)
-        self.log("train/clip_loss", directional_clip_loss, prog_bar=True, logger=True, on_step=True, on_epoch=False)
-        total_loss = reconstruction_loss + directional_clip_loss
+        self.log("train/vgg_loss", vgg_loss, prog_bar=False, logger=True, on_step=True, on_epoch=False)
+        self.log("train/rl_loss", self.rec_loss_lambda * reconstruction_loss, prog_bar=True, logger=True, on_step=True, on_epoch=False)
+        self.log("train/clip_loss",  self.clip_loss_lambda *  directional_clip_loss, prog_bar=True, logger=True, on_step=True, on_epoch=False)
+        self.log("train/l2_latent_loss", self.l2_latent_lambda * latent_loss, prog_bar=True, logger=True, on_step=True, on_epoch=False)
+        total_loss = self.rec_loss_lambda * reconstruction_loss + self.clip_loss_lambda * directional_clip_loss + self.l2_latent_lambda * latent_loss
         
         return total_loss
     
@@ -154,9 +188,9 @@ class New_DiCoMOGAN(pl.LightningModule):
         txt_feat = txt_feat.unsqueeze(0).repeat(n_frames, 1, 1) # T x B x D
         txt_feat = txt_feat.view(bs * n_frames, -1) # T * B x D
         
-        txt_feat_mismatch, _ = self.preprocess_feat(txt_feat)
-        adjusted_latent = inversions + self.mapping_network(inversions, txt_feat)
-        adjusted_mismatched_latent = inversions + self.mapping_network(inversions, txt_feat_mismatch)
+        txt_feat_mismatch, _ = self.preprocess_text_feat(txt_feat)
+        adjusted_latent = inversions + self.delta_inversion_weight * self.mapping_network(inversions, txt_feat)
+        adjusted_mismatched_latent = inversions + self.delta_inversion_weight * self.mapping_network(inversions, txt_feat_mismatch)
 
         mismatched_img = self.G(adjusted_mismatched_latent) #.reshape(bs * T, ch, height, width)
         reconstructed = self.G(adjusted_latent) #.reshape(bs * T, ch, height, width)

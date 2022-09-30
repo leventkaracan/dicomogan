@@ -69,7 +69,8 @@ class AttributeMapper(nn.Module):
                 coarse_cut_flag,
                 medium_cut_flag,
                 fine_cut_flag,
-                attr_vec_dim):
+                attr_vec_dim,
+                predict_delta=True):
         super(AttributeMapper, self).__init__()
         self.use_coarse_mapper = use_coarse_mapper
         self.use_medium_mapper = use_medium_mapper
@@ -79,6 +80,7 @@ class AttributeMapper(nn.Module):
         self.fine_cut_flag = fine_cut_flag
 
         self.attr_vec_dim = attr_vec_dim
+        self.predict_delta = predict_delta
         
         # Original HairCLIP includes CLIP here
         # For the proposed attribute manipulation model, we don't need any CLIP model, so we can ignore it
@@ -125,13 +127,16 @@ class AttributeMapper(nn.Module):
         if self.use_coarse_mapper:
             x_coarse = self.coarse_mapping(x_coarse, attribute_vector[:, :4, :], cut_flag=self.coarse_cut_flag)
         else:
-            x_coarse = torch.zeros_like(x_coarse)
+            if self.predict_delta:
+                x_coarse = torch.zeros_like(x_coarse)
         if self.use_medium_mapper:
             x_medium = self.medium_mapping(x_medium, attribute_vector[:, 4:8, :], cut_flag=self.medium_cut_flag)
         else:
-            x_medium = torch.zeros_like(x_medium)
+            if self.predict_delta:
+                x_medium = torch.zeros_like(x_medium)
         if self.use_fine_mapper:
-            x_fine = self.fine_mapping(x_fine, attribute_vector[:, 8:, :], cut_flag=self.fine_cut_flag)
+            if self.predict_delta:
+                x_fine = self.fine_mapping(x_fine, attribute_vector[:, 8:, :], cut_flag=self.fine_cut_flag)
         else:
             x_fine = torch.zeros_like(x_fine)
             
