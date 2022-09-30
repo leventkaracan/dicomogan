@@ -44,6 +44,7 @@ class VideoDataFashion(data.Dataset):
             trans_list.append(transforms.ToTensor())
             self.img_transform=transforms.Compose(trans_list)
         
+        self.base_seed = np.random.randint(100000)
         self.img_root = img_root
         self.video_list = open(video_list).readlines()
         self.inversion_root = inversion_root
@@ -59,8 +60,7 @@ class VideoDataFashion(data.Dataset):
     def _load_dataset(self):
         data_paths, inversion_paths, desc_paths, frame_numbers, attributes = [], [], [], [], []
         intersection = None
-        from tqdm import tqdm
-        for idx, vid_path in tqdm(enumerate(self.video_list)):
+        for idx, vid_path in enumerate(self.video_list):
             paths, i_paths, d_paths, f_nums = [], [], [], []
             fname = vid_path[:-1]
             for f in sorted(os.listdir(os.path.join(self.img_root, fname))):
@@ -115,7 +115,7 @@ class VideoDataFashion(data.Dataset):
 
         # sample frames
         bin = index // self.batch_size
-        local_state = np.random.RandomState(bin + 1)
+        local_state = np.random.RandomState(bin + self.base_seed)
         sampleT = local_state.choice(self.frame_numbers[bin][1:], self.n_sampled_frames-1, replace=False)
         sampleT = np.append(sampleT, self.frame_numbers[bin][0])
         sampleT = np.sort(sampleT)
