@@ -73,7 +73,7 @@ class New_DiCoMOGAN(pl.LightningModule):
     def get_text_embedding(self, description):
         return self.directional_clip_loss.encode_text(self.directional_clip_loss.tokenize(description))
     
-    def preprocess_text_feat(self, latent_feat):
+    def preprocess_text_feat(self, latent_feat, random=True):
         bs = int(latent_feat.size(0)/2)
         if self.tgt_text_embed is not None:
             self.tgt_text_embed = self.tgt_text_embed.to(latent_feat.device)
@@ -81,18 +81,31 @@ class New_DiCoMOGAN(pl.LightningModule):
             latent_splits = torch.split(latent_feat, bs, 0)
             latent_feat_relevant = torch.cat((self.tgt_text_embed.repeat(bs, 1), latent_splits[1]), 0)
         else:
-            latent_feat_mismatch = torch.roll(latent_feat, 1, 0)
+            if random:
+                roll_seed = torch.randint(1, latent_feat.shape[0])
+            else:
+                roll_seed = 1
+            latent_feat_mismatch = torch.roll(latent_feat, roll_seed, dims=0)
             latent_splits = torch.split(latent_feat, bs, 0)
-            latent_feat_relevant = torch.cat((torch.roll(latent_splits[0], -1, 0), latent_splits[1]), 0)
+            roll_seed = torch.randint(1, bs)
+            latent_feat_relevant = torch.cat((torch.roll(latent_splits[0], roll_seed, dims=0), latent_splits[1]), 0)
         return latent_feat_mismatch, latent_feat_relevant
 
-    # def preprocess_feat(self, latent_feat):
-    #     bs = int(latent_feat.size(0)/2)
-    #     latent_feat_mismatch = torch.roll(latent_feat, 1, 0)
-    #     latent_splits = torch.split(latent_feat, bs, 0)
-    #     latent_feat_relevant = torch.cat((torch.roll(latent_splits[0], -1, 0), latent_splits[1]), 0)
-    #     return latent_feat_mismatch, latent_feat_relevant
+    def preprocess_latent_feat(self, latent_feat, random=True): # B x T x D
+        if random:
+            roll_seed = torch.randint(1, latent_feat.shape[1])
+        else:
+            roll_seed = 1
+        latent_feat_mismatch = torch.roll(latent_feat, roll_seed, dims=1)
+        bs = int(latent_feat.size(1)/2)
+        latent_splits = torch.split(latent_feat, bs, 1)
+        roll_seed = torch.randint(1, bs)
+        latent_feat_relevant = torch.cat((torch.roll(latent_splits[0], roll_seed, dims=1), latent_splits[1]), 1)
+        return latent_feat_mismatch, latent_feat_relevant
     
+    def on_epoch_start(self,):
+        self.trainer.train_dataloader.dataset.datasets.base_seed = np.random.randint(1000000)
+
     def training_step(self, batch, batch_idx, optimizer_idx=0):
         vid = batch['img']
         input_desc = batch['raw_desc']

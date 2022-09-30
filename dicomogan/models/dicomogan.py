@@ -36,6 +36,7 @@ class DiCoMOGAN(pl.LightningModule):
                     lambda_D,
                     scheduler_config = None,
                     custom_loggers = None,
+                    tgt_text = None,
                     n_critic = 1,
                     ):
         super().__init__()
@@ -64,7 +65,7 @@ class DiCoMOGAN(pl.LightningModule):
         self.G = instantiate_from_config(generator_config)
         self.mapping = instantiate_from_config(mapping_config) 
         self.D = instantiate_from_config(discriminator_config)
-        self.clip_model, self.clip_preprocess = clip.load("ViT-B/32") # TODO: if not gonna use clip, then load all embeds before training. Save 3g memeory
+        self.clip_model, self.clip_preprocess = clip.load("ViT-B/32", device=self.device) # TODO: if not gonna use clip, then load all embeds before training. Save 3g memeory
         self.clip_model = self.clip_model 
         self.clip_model.requires_grad_(False)
 
@@ -74,16 +75,41 @@ class DiCoMOGAN(pl.LightningModule):
         self.criterionVGG = VGGLoss()
         self.criterionUnsupFactor = torch.nn.MSELoss()
 
+        self.tgt_text_embed = None
+        if tgt_text is not None:
+            self.tgt_text_embed = self.clip_encode_text([tgt_text]) # 1 x 512
+
     
-    def preprocess_feat(self, latent_feat):
-            latent_feat = latent_feat.clone()
-            bs = int(latent_feat.size(0)/2)
-            latent_feat_mismatch = torch.roll(latent_feat, 1, 0)
+    def preprocess_text_feat(self, latent_feat, random=True):
+        bs = int(latent_feat.size(0)/2)
+        if self.tgt_text_embed is not None:
+            self.tgt_text_embed = self.tgt_text_embed.to(latent_feat.device)
+            latent_feat_mismatch = self.tgt_text_embed.repeat(latent_feat.size(0), 1)
             latent_splits = torch.split(latent_feat, bs, 0)
-            latent_feat_relevant = torch.cat((torch.roll(latent_splits[0], -1, 0), latent_splits[1]), 0)
-            return latent_feat_mismatch, latent_feat_relevant
+            latent_feat_relevant = torch.cat((self.tgt_text_embed.repeat(bs, 1), latent_splits[1]), 0)
+        else:
+            if random:
+                roll_seed = torch.randint(1, latent_feat.shape[0])
+            else:
+                roll_seed = 1
+            latent_feat_mismatch = torch.roll(latent_feat, roll_seed, dims=0)
+            latent_splits = torch.split(latent_feat, bs, 0)
+            roll_seed = torch.randint(1, bs)
+            latent_feat_relevant = torch.cat((torch.roll(latent_splits[0], roll_seed, dims=0), latent_splits[1]), 0)
+        return latent_feat_mismatch, latent_feat_relevant
 
-
+    # TODO: debug this 
+    def preprocess_latent_feat(self, latent_feat, random=True): # B x T x D
+        if random:
+            roll_seed = torch.randint(1, latent_feat.shape[1])
+        else:
+            roll_seed = 1
+        latent_feat_mismatch = torch.roll(latent_feat, roll_seed, dims=1)
+        bs = int(latent_feat.size(1)/2)
+        latent_splits = torch.split(latent_feat, bs, 1)
+        roll_seed = torch.randint(1, bs)
+        latent_feat_relevant = torch.cat((torch.roll(latent_splits[0], roll_seed, dims=1), latent_splits[1]), 1)
+        return latent_feat_mismatch, latent_feat_relevant
 
     def reconstruction_loss(self, x, x_recon, distribution):
         batch_size = x.size(0)
@@ -118,6 +144,9 @@ class DiCoMOGAN(pl.LightningModule):
     def clip_encode_text(self, texts):
         text = clip.tokenize(texts).to(self.device)
         return self.clip_model.encode_text(text).float()
+    
+    def on_epoch_start(self,):
+            self.trainer.train_dataloader.dataset.datasets.base_seed = np.random.randint(1000000)
 
     def training_step(self, batch, batch_idx, optimizer_idx=0):
         vid = batch['img'] # B x T x ch x H x W 
@@ -144,7 +173,7 @@ class DiCoMOGAN(pl.LightningModule):
         # encode text
         txt_feat = self.clip_encode_text(input_desc)  # B x D
         txt_feat = txt_feat.unsqueeze(0).repeat(n_frames,1,1)
-        txt_feat = txt_feat.view(bs * n_frames, -1)  # T*B x D
+        txt_feat = txt_feat.contiguous().view(bs * n_frames, -1)  # T*B x D
 
         # vae encode frames
         zs, zd, mu_logvar_s, mu_logvar_d = self.bVAE_enc(vid_rs, ts)
@@ -152,7 +181,7 @@ class DiCoMOGAN(pl.LightningModule):
                                
         if optimizer_idx == 0:
             total_loss = 0
-            vgg_loss = 0
+            vgg_loss = 0 
             beta_vae_loss = 0
             G_loss = 0
             unsup_loss = 0
@@ -176,7 +205,7 @@ class DiCoMOGAN(pl.LightningModule):
             self.log("train/kl_loss", kl_loss, prog_bar=True, logger=True, on_step=True, on_epoch=False)
 
             beta_vae_loss = 0.5 * (recon_loss + recon_lossT) +  kl_loss
-            self.log("train/beta_vae_loss", beta_vae_loss, prog_bar=False, logger=True, on_step=True, on_epoch=False)
+            self.log("train/beta_vae_loss", self.lambda_bvae * beta_vae_loss, prog_bar=False, logger=True, on_step=True, on_epoch=False)
 
 
             #  generator loss
@@ -201,9 +230,14 @@ class DiCoMOGAN(pl.LightningModule):
                 return gan_loss, vgg_loss, unsup_loss
 
 
-            latentw = self.mapping(z_vid[:,self.vae_cond_dim:])
-            _,txt_feat_relevant = self.preprocess_feat(txt_feat)
-            _,latentw_relevant = self.preprocess_feat(latentw)
+            latentw = self.mapping(z_vid[:,self.vae_cond_dim:]) # T*B x D
+            # roll video-wise
+            reshaped_latentw = latentw.view(T, bs, -1).permute(1, 0, 2).contiguous()
+            _,latentw_relevant = self.preprocess_latent_feat(reshaped_latentw) # B x T x D
+            latentw_relevant = latentw_relevant.permute(1, 0, 2).contiguous().view(T*bs, -1)
+            
+            # roll batch-wise
+            _,txt_feat_relevant = self.preprocess_text_feat(txt_feat)
 
             gan_loss1, vgg_loss1, unsup_loss1 = GAN_VGG_Unsup_loss(video_sample_norm, txt_feat_relevant, latentw, z_rel)
             gan_loss2, vgg_loss2, unsup_loss2 = GAN_VGG_Unsup_loss(video_sample_norm, txt_feat, latentw_relevant, z_rel)
@@ -213,9 +247,9 @@ class DiCoMOGAN(pl.LightningModule):
             vgg_loss = (vgg_loss1 + vgg_loss2 + vgg_loss3) / 3
             unsup_loss = (unsup_loss1 + unsup_loss2 + unsup_loss3) / 3
 
-            self.log("train/G_loss", G_loss, prog_bar=False, logger=True, on_step=True, on_epoch=False)
-            self.log("train/vgg_loss", vgg_loss, prog_bar=False, logger=True, on_step=True, on_epoch=False)
-            self.log("train/unsup_loss", unsup_loss, prog_bar=False, logger=True, on_step=True, on_epoch=False)
+            self.log("train/G_loss", self.lambda_G * G_loss, prog_bar=False, logger=True, on_step=True, on_epoch=False)
+            self.log("train/vgg_loss", self.lambda_vgg * vgg_loss, prog_bar=False, logger=True, on_step=True, on_epoch=False)
+            self.log("train/unsup_loss", self.lambda_unsup * unsup_loss, prog_bar=False, logger=True, on_step=True, on_epoch=False)
             
             total_loss = self.lambda_bvae * beta_vae_loss + self.lambda_G * G_loss + self.lambda_vgg * vgg_loss + self.lambda_unsup * unsup_loss
             self.log("train/generator_loss", total_loss, prog_bar=False, logger=True, on_step=True, on_epoch=False)
@@ -229,35 +263,39 @@ class DiCoMOGAN(pl.LightningModule):
                 return self.criterionGAN(logit, real)
             
             # prepare latents
-            latentw = self.mapping(z_vid[:,self.vae_cond_dim:])
-            txt_feat_mismatch, txt_feat_relevant = self.preprocess_feat(txt_feat)
-            latentw_mismatch, latentw_relevant = self.preprocess_feat(latentw)
+            latentw = self.mapping(z_vid[:,self.vae_cond_dim:]) # T*B x D
+            # roll video-wise
+            reshaped_latentw = latentw.view(T, bs, -1).permute(1, 0, 2).contiguous()
+            latentw_mismatch,latentw_relevant = self.preprocess_latent_feat(reshaped_latentw) # B x T x D
+            latentw_relevant = latentw_relevant.permute(1, 0, 2).contiguous().view(T*bs, -1)
+            latentw_mismatch = latentw_mismatch.permute(1, 0, 2).contiguous().view(T*bs, -1)
+            # roll batch-wise
+            txt_feat_mismatch, txt_feat_relevant = self.preprocess_text_feat(txt_feat)
 
             # real image with real latent)
             D_loss += Disc_loss(video_sample_norm, txt_feat, latentw, True)
 
             # real image with mismatching text
-            D_loss += Disc_loss(video_sample_norm, txt_feat_mismatch, latentw, False)
+            D_loss += 0.5/3 * Disc_loss(video_sample_norm, txt_feat_mismatch, latentw, False)
 
             # real image with mismatching vae
-            D_loss += Disc_loss(video_sample_norm, txt_feat, latentw_mismatch, False)
+            D_loss += 0.5/3 * Disc_loss(video_sample_norm, txt_feat, latentw_mismatch, False)
 
             # real image with mismatching text and vae
-            D_loss += Disc_loss(video_sample_norm, txt_feat_mismatch, latentw_mismatch, False)
+            D_loss += 0.5/3 * Disc_loss(video_sample_norm, txt_feat_mismatch, latentw_mismatch, False)
 
             # synthesized image with semantically relevant text
             fake = self.G(video_sample_norm, txt_feat_relevant, latentw)
-            D_loss += Disc_loss(fake.detach(), txt_feat_relevant, latentw, False)
+            D_loss += 0.5/3 * Disc_loss(fake.detach(), txt_feat_relevant, latentw, False)
 
             # synthesized image with semantically relevant vae
             fake = self.G(video_sample_norm, txt_feat, latentw_relevant)
-            D_loss += Disc_loss(fake.detach(), txt_feat, latentw_relevant, False)
+            D_loss += 0.5/3 * Disc_loss(fake.detach(), txt_feat, latentw_relevant, False)
 
             # synthesized image with semantically relevant text and vae
             fake = self.G(video_sample_norm, txt_feat_relevant, latentw_relevant)
-            D_loss += Disc_loss(fake.detach(), txt_feat_relevant, latentw_relevant, False)
+            D_loss += 0.5/3 * Disc_loss(fake.detach(), txt_feat_relevant, latentw_relevant, False)
             
-            D_loss /= 7 # normalize according to the number of samples
             self.log("train/D_loss", D_loss, prog_bar=True, logger=True, on_step=True, on_epoch=False)
             return self.lambda_D * D_loss
 
@@ -280,6 +318,7 @@ class DiCoMOGAN(pl.LightningModule):
         video_sample = vid # B x T x C x H x W 
         video_sample = video_sample.permute(1,0,2,3,4) # T x B x C x H x W 
         video_sample = video_sample.contiguous().view(n_frames * bs, ch, height, width) # T*B x C x H x W 
+        video_sample_norm = video_sample * 2 - 1 # range [-1, 1] to pass to the generator and disc
         
         # downsample res for vae
         vid_rs_full = nn.functional.interpolate(video_sample, scale_factor=0.5, mode="bicubic", align_corners=False, recompute_scale_factor=True)
@@ -298,24 +337,28 @@ class DiCoMOGAN(pl.LightningModule):
         muT, logvarT = self.text_enc(txt_feat)
         zT = self.reparametrize(muT, logvarT) # T*B x D 
         
-        ret['image'] = vid_rs_full * 2 - 1
+        ret['image'] = vid_rs_full * 2 - 1 # downsampled version
         ret['x_recon_vae_text'] = self.bVAE_dec(torch.cat((zT,z_vid[:, self.vae_cond_dim:]), 1)) * 2 - 1 # T*B x C x H x W
         ret['x_recon_vae'] = self.bVAE_dec(z_vid) * 2 - 1 # T*B x C x H x W
 
         # generate with mathching text
         latentw = self.mapping(z_vid[:,self.vae_cond_dim:])
-        mismatch_txt_feat, txt_feat_relevant = self.preprocess_feat(txt_feat)
-        mismatche_latentw, latentw_relevant = self.preprocess_feat(latentw)
+        
+        # roll video-wise
+        reshaped_latentw = latentw.view(T, bs, -1).permute(1, 0, 2).contiguous()
+        mismatche_latentw, _ = self.preprocess_latent_feat(reshaped_latentw) # B x T x D
+        mismatche_latentw = mismatche_latentw.permute(1, 0, 2).contiguous().view(T*bs, -1)
+        # roll batch-wise
+        mismatch_txt_feat, _ = self.preprocess_text_feat(txt_feat)
 
-        ret['x_recon_gan']  = self.G(video_sample * 2 - 1, txt_feat, latentw)
-        ret['x_mismatch_text']  = self.G(video_sample * 2 - 1, mismatch_txt_feat, latentw)
-        ret['x_mismatch_wcont']  = self.G(video_sample * 2 - 1, txt_feat, mismatche_latentw)
+        ret['x_recon_gan']  = self.G(video_sample_norm, txt_feat, latentw)
+        ret['x_mismatch_text']  = self.G(video_sample_norm, mismatch_txt_feat, latentw)
+        ret['x_mismatch_wcont']  = self.G(video_sample_norm, txt_feat, mismatche_latentw)
 
         return ret
 
 
 
-    # TODO: Check betas and epsilons of the optimizers
     def configure_optimizers(self):
         lr = self.learning_rate
         vae_params = list(self.bVAE_enc.parameters())+\
@@ -345,24 +388,24 @@ class DiCoMOGAN(pl.LightningModule):
         
         ae_ret = {"optimizer": opt_ae, "frequency": 1}
 
-        ae_scheduler = None
-        if self.scheduler_config is not None:
-            # TODO: scheduler not implemented
-            ae_scheduler = LambdaLR(opt_ae, lr_lambda=instantiate_from_config(self.scheduler_config).schedule, verbose=False)
-            ae_ret['lr_scheduler'] = {
-                        'scheduler': ae_scheduler, 
-                        'interval': 'step'}
+        # ae_scheduler = None
+        # if self.scheduler_config is not None:
+        #     # TODO: scheduler not implemented
+        #     ae_scheduler = LambdaLR(opt_ae, lr_lambda=instantiate_from_config(self.scheduler_config).schedule, verbose=False)
+        #     ae_ret['lr_scheduler'] = {
+        #                 'scheduler': ae_scheduler, 
+        #                 'interval': 'step'}
 
         opt_disc = torch.optim.Adam(dis_params,
-                                lr=lr, betas=(0.5, 0.99)) 
+                                lr=lr, betas=(0.5, 0.999)) 
         
         disc_ret = {"optimizer": opt_disc, "frequency": 1}
-        if self.scheduler_config is not None:
-            # TODO: scheduler not implemented
-            dis_scheduler = LambdaLR(opt_disc, lr_lambda=instantiate_from_config(self.scheduler_config).schedule, verbose=False)
-            disc_ret['lr_scheduler'] = {
-                    'scheduler': dis_scheduler, 
-                    'interval': 'step'}
+        # if self.scheduler_config is not None:
+        #     # TODO: scheduler not implemented
+        #     dis_scheduler = LambdaLR(opt_disc, lr_lambda=instantiate_from_config(self.scheduler_config).schedule, verbose=False)
+        #     disc_ret['lr_scheduler'] = {
+        #             'scheduler': dis_scheduler, 
+        #             'interval': 'step'}
 
         if self.n_critic < 0:
             ae_ret['frequency'] = -self.n_critic
