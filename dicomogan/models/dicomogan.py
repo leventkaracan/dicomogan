@@ -71,7 +71,6 @@ class DiCoMOGAN(pl.LightningModule):
 
         # loss
         self.criterionGAN = GANLoss(use_lsgan=True, target_real_label=1.0)
-        self.criterionFeat = torch.nn.L1Loss()
         self.criterionVGG = VGGLoss()
         self.criterionUnsupFactor = torch.nn.MSELoss()
 
@@ -80,7 +79,7 @@ class DiCoMOGAN(pl.LightningModule):
             self.tgt_text_embed = self.clip_encode_text([tgt_text]) # 1 x 512
 
     
-    def preprocess_text_feat(self, latent_feat, random=True):
+    def preprocess_text_feat(self, latent_feat, mx_roll=1):
         bs = int(latent_feat.size(0)/2)
         if self.tgt_text_embed is not None:
             self.tgt_text_embed = self.tgt_text_embed.to(latent_feat.device)
@@ -88,26 +87,34 @@ class DiCoMOGAN(pl.LightningModule):
             latent_splits = torch.split(latent_feat, bs, 0)
             latent_feat_relevant = torch.cat((self.tgt_text_embed.repeat(bs, 1), latent_splits[1]), 0)
         else:
-            if random:
-                roll_seed = torch.randint(1, latent_feat.shape[0])
+            if mx_roll > 1:
+                roll_seed = np.random.randint(1, mx_roll)
             else:
                 roll_seed = 1
             latent_feat_mismatch = torch.roll(latent_feat, roll_seed, dims=0)
             latent_splits = torch.split(latent_feat, bs, 0)
-            roll_seed = torch.randint(1, bs)
+
+            if mx_roll > 1:
+                roll_seed = np.random.randint(1, min(bs, mx_roll))
+            else:
+                roll_seed = 1
             latent_feat_relevant = torch.cat((torch.roll(latent_splits[0], roll_seed, dims=0), latent_splits[1]), 0)
         return latent_feat_mismatch, latent_feat_relevant
 
     # TODO: debug this 
-    def preprocess_latent_feat(self, latent_feat, random=True): # B x T x D
-        if random:
-            roll_seed = torch.randint(1, latent_feat.shape[1])
+    def preprocess_latent_feat(self, latent_feat, mx_roll=1): # B x T x D
+        if mx_roll > 1:
+                roll_seed = np.random.randint(1, mx_roll)
         else:
             roll_seed = 1
         latent_feat_mismatch = torch.roll(latent_feat, roll_seed, dims=1)
         bs = int(latent_feat.size(1)/2)
         latent_splits = torch.split(latent_feat, bs, 1)
-        roll_seed = torch.randint(1, bs)
+
+        if mx_roll > 1:
+            roll_seed = np.random.randint(1, min(mx_roll, bs))
+        else:
+            roll_seed = 1
         latent_feat_relevant = torch.cat((torch.roll(latent_splits[0], roll_seed, dims=1), latent_splits[1]), 1)
         return latent_feat_mismatch, latent_feat_relevant
 
@@ -233,11 +240,11 @@ class DiCoMOGAN(pl.LightningModule):
             latentw = self.mapping(z_vid[:,self.vae_cond_dim:]) # T*B x D
             # roll video-wise
             reshaped_latentw = latentw.view(T, bs, -1).permute(1, 0, 2).contiguous()
-            _,latentw_relevant = self.preprocess_latent_feat(reshaped_latentw) # B x T x D
+            _,latentw_relevant = self.preprocess_latent_feat(reshaped_latentw, mx_roll=T) # B x T x D
             latentw_relevant = latentw_relevant.permute(1, 0, 2).contiguous().view(T*bs, -1)
             
             # roll batch-wise
-            _,txt_feat_relevant = self.preprocess_text_feat(txt_feat)
+            _,txt_feat_relevant = self.preprocess_text_feat(txt_feat, mx_roll=bs)
 
             gan_loss1, vgg_loss1, unsup_loss1 = GAN_VGG_Unsup_loss(video_sample_norm, txt_feat_relevant, latentw, z_rel)
             gan_loss2, vgg_loss2, unsup_loss2 = GAN_VGG_Unsup_loss(video_sample_norm, txt_feat, latentw_relevant, z_rel)
@@ -266,11 +273,11 @@ class DiCoMOGAN(pl.LightningModule):
             latentw = self.mapping(z_vid[:,self.vae_cond_dim:]) # T*B x D
             # roll video-wise
             reshaped_latentw = latentw.view(T, bs, -1).permute(1, 0, 2).contiguous()
-            latentw_mismatch,latentw_relevant = self.preprocess_latent_feat(reshaped_latentw) # B x T x D
+            latentw_mismatch,latentw_relevant = self.preprocess_latent_feat(reshaped_latentw, mx_roll=T) # B x T x D
             latentw_relevant = latentw_relevant.permute(1, 0, 2).contiguous().view(T*bs, -1)
             latentw_mismatch = latentw_mismatch.permute(1, 0, 2).contiguous().view(T*bs, -1)
             # roll batch-wise
-            txt_feat_mismatch, txt_feat_relevant = self.preprocess_text_feat(txt_feat)
+            txt_feat_mismatch, txt_feat_relevant = self.preprocess_text_feat(txt_feat, mx_roll=bs)
 
             # real image with real latent)
             D_loss += Disc_loss(video_sample_norm, txt_feat, latentw, True)

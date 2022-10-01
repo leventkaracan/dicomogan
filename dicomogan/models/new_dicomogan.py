@@ -43,7 +43,7 @@ class New_DiCoMOGAN(pl.LightningModule):
         self.G = instantiate_from_config(generator_config)
         self.mapping_network = instantiate_from_config(mapping_config)
         
-        self.G.eval()
+        self.G.eval() # TODO: why set G to eval? 
         self.requires_grad(self.G, False)
         
         # lambdas
@@ -73,7 +73,7 @@ class New_DiCoMOGAN(pl.LightningModule):
     def get_text_embedding(self, description):
         return self.directional_clip_loss.encode_text(self.directional_clip_loss.tokenize(description))
     
-    def preprocess_text_feat(self, latent_feat, random=True):
+    def preprocess_text_feat(self, latent_feat, mx_roll=1):
         bs = int(latent_feat.size(0)/2)
         if self.tgt_text_embed is not None:
             self.tgt_text_embed = self.tgt_text_embed.to(latent_feat.device)
@@ -81,25 +81,34 @@ class New_DiCoMOGAN(pl.LightningModule):
             latent_splits = torch.split(latent_feat, bs, 0)
             latent_feat_relevant = torch.cat((self.tgt_text_embed.repeat(bs, 1), latent_splits[1]), 0)
         else:
-            if random:
-                roll_seed = torch.randint(1, latent_feat.shape[0])
+            if mx_roll > 1:
+                roll_seed = np.random.randint(1, mx_roll)
             else:
                 roll_seed = 1
             latent_feat_mismatch = torch.roll(latent_feat, roll_seed, dims=0)
             latent_splits = torch.split(latent_feat, bs, 0)
-            roll_seed = torch.randint(1, bs)
+
+            if mx_roll > 1:
+                roll_seed = np.random.randint(1, min(bs, mx_roll))
+            else:
+                roll_seed = 1
             latent_feat_relevant = torch.cat((torch.roll(latent_splits[0], roll_seed, dims=0), latent_splits[1]), 0)
         return latent_feat_mismatch, latent_feat_relevant
 
-    def preprocess_latent_feat(self, latent_feat, random=True): # B x T x D
-        if random:
-            roll_seed = torch.randint(1, latent_feat.shape[1])
+    # TODO: debug this 
+    def preprocess_latent_feat(self, latent_feat, mx_roll=1): # B x T x D
+        if mx_roll > 1:
+                roll_seed = np.random.randint(1, mx_roll)
         else:
             roll_seed = 1
         latent_feat_mismatch = torch.roll(latent_feat, roll_seed, dims=1)
         bs = int(latent_feat.size(1)/2)
         latent_splits = torch.split(latent_feat, bs, 1)
-        roll_seed = torch.randint(1, bs)
+
+        if mx_roll > 1:
+            roll_seed = np.random.randint(1, min(mx_roll, bs))
+        else:
+            roll_seed = 1
         latent_feat_relevant = torch.cat((torch.roll(latent_splits[0], roll_seed, dims=1), latent_splits[1]), 1)
         return latent_feat_mismatch, latent_feat_relevant
     
@@ -107,10 +116,10 @@ class New_DiCoMOGAN(pl.LightningModule):
         self.trainer.train_dataloader.dataset.datasets.base_seed = np.random.randint(1000000)
 
     def training_step(self, batch, batch_idx, optimizer_idx=0):
-        vid = batch['img']
-        input_desc = batch['raw_desc']
-        sampleT = batch['sampleT']
-        inversions = batch['inversion']
+        vid = batch['img'] # B x T x C x H x W 
+        input_desc = batch['raw_desc'] # B
+        sampleT = batch['sampleT']  # B x T 
+        inversions = batch['inversion'] # B, T x n_layers x D
         
         if sampleT.shape[0] > 0:
             assert torch.all(sampleT[0] == sampleT[np.random.randint(sampleT.size(0)-1)+1])
@@ -128,15 +137,16 @@ class New_DiCoMOGAN(pl.LightningModule):
         txt_feat = txt_feat.unsqueeze(0).repeat(n_frames, 1, 1) # T x B x D
         txt_feat = txt_feat.view(bs * n_frames, -1) # T * B x D
         
-        txt_feat_mismatch, _ = self.preprocess_text_feat(txt_feat)
+        txt_feat_mismatch, _ = self.preprocess_text_feat(txt_feat, mx_roll=bs)
         B, n_frames, n_channels, dim = inversions.shape
         
-        inversions = inversions.reshape(B * n_frames, n_channels, dim)
+        inversions = inversions.permute(1, 0, 2, 3)
+        inversions = inversions.contiguous().reshape(T * B, n_channels, dim) # T * B x n_layers x D
         adjusted_latent = inversions + self.delta_inversion_weight * self.mapping_network(inversions, txt_feat)
         adjusted_mismatched_latent = inversions + self.delta_inversion_weight * self.mapping_network(inversions, txt_feat_mismatch)
 
-        mismatched_img = self.G(adjusted_mismatched_latent) #.reshape(bs * T, ch, height, width)
-        reconstructed = self.G(adjusted_latent) #.reshape(bs * T, ch, height, width)
+        mismatched_img = self.G(adjusted_mismatched_latent) #.reshape(T * B, ch, height, width)
+        reconstructed = self.G(adjusted_latent) #.reshape(T * B, ch, height, width)
 
         reconstructed = nn.functional.interpolate(reconstructed, size=(256, 192), mode="bicubic", align_corners=False)
         mismatched_img = nn.functional.interpolate(mismatched_img, size=(256, 192), mode="bicubic", align_corners=False)
@@ -151,7 +161,7 @@ class New_DiCoMOGAN(pl.LightningModule):
         self.log("train/rl_loss", self.rec_loss_lambda * reconstruction_loss, prog_bar=True, logger=True, on_step=True, on_epoch=False)
         self.log("train/clip_loss",  self.clip_loss_lambda *  directional_clip_loss, prog_bar=True, logger=True, on_step=True, on_epoch=False)
         self.log("train/l2_latent_loss", self.l2_latent_lambda * latent_loss, prog_bar=True, logger=True, on_step=True, on_epoch=False)
-        total_loss = self.rec_loss_lambda * reconstruction_loss + self.clip_loss_lambda * directional_clip_loss + self.l2_latent_lambda * latent_loss
+        total_loss = self.rec_loss_lambda * reconstruction_loss + self.clip_loss_lambda * directional_clip_loss + self.l2_latent_lambda * latent_loss + vgg_loss
         
         return total_loss
     
@@ -201,12 +211,12 @@ class New_DiCoMOGAN(pl.LightningModule):
         txt_feat = txt_feat.unsqueeze(0).repeat(n_frames, 1, 1) # T x B x D
         txt_feat = txt_feat.view(bs * n_frames, -1) # T * B x D
         
-        txt_feat_mismatch, _ = self.preprocess_text_feat(txt_feat)
+        txt_feat_mismatch, _ = self.preprocess_text_feat(txt_feat, mx_roll=1)
         adjusted_latent = inversions + self.delta_inversion_weight * self.mapping_network(inversions, txt_feat)
         adjusted_mismatched_latent = inversions + self.delta_inversion_weight * self.mapping_network(inversions, txt_feat_mismatch)
 
-        mismatched_img = self.G(adjusted_mismatched_latent) #.reshape(bs * T, ch, height, width)
-        reconstructed = self.G(adjusted_latent) #.reshape(bs * T, ch, height, width)
+        mismatched_img = self.G(adjusted_mismatched_latent) #.reshape(T ( B), ch, height, width)
+        reconstructed = self.G(adjusted_latent) #.reshape(T * B, ch, height, width)
 
         ret['reconstruction'] = reconstructed
         ret['mismatched_text'] = mismatched_img
