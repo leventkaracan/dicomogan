@@ -126,7 +126,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         assert batch_size != 0
 
         if distribution == 'bernoulli':
-            recon_loss = F.binary_cross_entropy(x_recon, x, reduction="mean")
+            recon_loss = F.binary_cross_entropy(x_recon, x, reduction="sum")
             #recon_loss = F.binary_cross_entropy_with_logits(x_recon, x, size_average=False)
 
         elif distribution == 'gaussian':

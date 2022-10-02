@@ -145,6 +145,12 @@ class VideoDataFashion(data.Dataset):
 
         return return_list
 
+    def reset(self, ):
+        self.base_seed = np.random.randint(100000)
+
+        # permute indecies
+        self.video_list = np.random.permutation(self.video_list)
+        self.data_paths, self.inversion_paths, self.desc_paths, self.frame_numbers, self.attributes = self._load_dataset()
 
     def get_image(self, img_path):
         img = Image.open(img_path).convert('RGB')
