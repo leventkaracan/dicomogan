@@ -10,9 +10,9 @@ import torchvision.transforms as transforms
 from torchvision.utils import save_image
 import os
 from PIL import Image
-from dicomogan.model import MultiscaleDiscriminatorPixpixHDMFMOD
-from dicomogan.model import MappingNetworkVAE, Generator2, EncoderVideo_LatentODE, Decoder, TextEncoder, LatentODEfunc
-from data.video import VideoDataFashion
+from dicomogan.modules import MultiscaleDiscriminatorPixpixHDMFMOD
+from dicomogan.modules import MappingNetworkVAE, Generator2, EncoderVideo_LatentODE, Decoder, TextEncoder, LatentODEfunc
+from dicomogan.data.new_video import VideoDataFashion
 from dicomogan.losses.loss_lib import GANLoss, VGGLoss
 import random
 from torchdiffeq import odeint
@@ -150,16 +150,17 @@ if __name__ == '__main__':
 			transforms.Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711))])
 
 	print('Loading a dataset...')
-	train_data = VideoDataFashion(args.img_root,
-		              img_transform=transforms.Compose([
-		                  transforms.CenterCrop((512, 384)),
-		                  transforms.Resize((256, 192)),
-		                  transforms.ToTensor()
-		              ]))
+	train_data = VideoDataFashion(img_root=args.img_root, 
+						video_list='data/fashion/fashion_train_videos.txt',
+						n_sampled_frames = 4,
+						batch_size=args.batch_size,
+						crop=[512, 384],
+						size=[256, 192],
+						)
 
 	train_loader = data.DataLoader(train_data,
 								   batch_size=args.batch_size,
-								   shuffle=True,
+								   shuffle=False,
 								   num_workers=args.num_threads)
 
 
@@ -189,7 +190,7 @@ if __name__ == '__main__':
 
 	criterionGAN = GANLoss(use_lsgan=True, target_real_label=1.0)
 	criterionFeat = torch.nn.L1Loss()
-	criterionVGG = VGGLoss()
+	criterionVGG = VGGLoss().cuda()
 	criterionUnsupFactor = torch.nn.MSELoss()
 
 
@@ -241,27 +242,26 @@ if __name__ == '__main__':
 		avg_D_real_a_loss = 0
 		avg_ganvae_loss = 0
 		for i, data in enumerate(train_loader):
-
 			vid = data['img'].cuda()
 			input_desc = data['raw_desc']
 
 			# todo preprocess the embeddings
-			text = clip.tokenize([*input_desc[0]]).to(device)
+			text = clip.tokenize(input_desc).to(device)
 			txt_feat = clip_model.encode_text(text).float()
 
 			bs, T, ch, height, width = vid.size()
 
 			# sample 4 timestamps include 0
 			# Question: is it alright to move sampling to the dataloader? 
-			sampleT = np.arange(T-1) + 1
-			sampleT = np.random.choice(sampleT, 3, replace= False)
-			# TODO: experiment first without ODE 
-			sampleT = np.insert(sampleT, 0, 0, axis=0) # Question: does it have to start with the first frame or it does not matter? We should always start with the first frame. We should have simialr motion in similar timestamps. TODO: fix that in my code 
-			sampleT = np.sort(sampleT)
+			sampleT = data['sampleT'][0]
+			# sampleT = np.random.choice(sampleT, 3, replace= False)
+			# # TODO: experiment first without ODE 
+			# sampleT = np.insert(sampleT, 0, 0, axis=0) # Question: does it have to start with the first frame or it does not matter? We should always start with the first frame. We should have simialr motion in similar timestamps. TODO: fix that in my code 
+			# sampleT = np.sort(sampleT)
 			#print(sampleT)
 			ts = (sampleT)*0.01 # Why normalize ts? ODE training is problematic. Try different values. TODO: research more about normalization for ts
 			#print(ts)
-			ts = torch.from_numpy(ts).cuda()
+			ts = ts.cuda()
 			ts = ts - ts[0]
 
 			vid_norm = vid * 2 - 1
@@ -288,7 +288,7 @@ if __name__ == '__main__':
 			text_enc.zero_grad()
 			bVAE_dec.zero_grad()
 
-			video_sample = vid[:, sampleT[:]]
+			video_sample = vid
 			video_sample = video_sample.permute(1,0,2,3,4)
 			video_sample = video_sample.contiguous().view(bs * 4, ch, height, width)
 			# downsample resolution to half
@@ -348,7 +348,7 @@ if __name__ == '__main__':
 
 			vid_vis = video_sample.reshape(4, bs, ch, int(0.5 * height), int(0.5 * width))
 			rec_vis = x_recon.reshape( 4, bs, ch, int(0.5 * height), int(0.5 * width))
-			recT_vis = recon_lossT.reshape( 4, bs, ch, int(0.5 * height), int(0.5 * width))
+			recT_vis = x_reconT.reshape( 4, bs, ch, int(0.5 * height), int(0.5 * width))
 			save_image((vid_vis[:, 0].data), './examples/real/epoch_%d.png' % (epoch + 1))
 			save_image((rec_vis[:, 0].data), './examples/recon/epoch_%d.png' % (epoch + 1))
 			save_image((recT_vis[:, 0].data), './examples/reconT/epoch_%d.png' % (epoch + 1))
@@ -367,7 +367,7 @@ if __name__ == '__main__':
 			zs, zd, mu_logvar_s, mu_logvar_d = bVAE_enc(vid_rs, ts)
 			z_vid = torch.cat((zs, zd), 1) # T*B x D 
 
-			video_sample = vid_norm[:, sampleT[:]]
+			video_sample = vid_norm
 			video_sample = video_sample.permute(1,0,2,3,4)
 			video_sample = video_sample.contiguous().view(bs * 4, ch, height, width)
 

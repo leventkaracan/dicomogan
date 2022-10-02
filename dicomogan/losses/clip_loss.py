@@ -138,15 +138,15 @@ class CLIPLoss(pl.LightningModule):
 
         # normalize
         if norm:
-            pos_style_embed /= pos_style_embed.clone().norm(dim=-1, keepdim=True)
-            ref_style_embed /= ref_style_embed.clone().norm(dim=-1, keepdim=True)
+            pos_style_embed = pos_style_embed / pos_style_embed.norm(dim=-1, keepdim=True)
+            ref_style_embed = ref_style_embed / ref_style_embed.norm(dim=-1, keepdim=True)
 
         pos_direction = (pos_style_embed.float().contiguous()  - ref_style_embed.float().contiguous())
         neg_direction = (pos_encoding.float().contiguous()  - neg_encoding.float().contiguous())
 
         if norm:
-            pos_direction /= (pos_direction.clone().norm(dim=-1, keepdim=True))
-            neg_direction /= (neg_direction.clone().norm(dim=-1, keepdim=True))
+            pos_direction = pos_direction / (pos_direction.norm(dim=-1, keepdim=True))
+            neg_direction = neg_direction / (neg_direction.norm(dim=-1, keepdim=True))
 
         # project to given directions
         if self.proj_directions is not None:
@@ -156,12 +156,12 @@ class CLIPLoss(pl.LightningModule):
 
             global_step = min(global_step, len(self.betas)-1)
             pos_betas = (self.proj_directions.to(pos_direction.device).unsqueeze(0) * pos_direction.unsqueeze(1)).sum(-1) # B x N
-            pos_betas /=  self.proj_norm.to(pos_direction.device)
+            pos_betas =  pos_betas / self.proj_norm.to(pos_direction.device)
             # print("pos_beta", pos_betas)
 
             neg_betas = (self.proj_directions.to(neg_direction.device).unsqueeze(0) * neg_direction.unsqueeze(1)).sum(-1) # B x N
             # print("neg_beta", neg_betas)
-            neg_betas /=  self.proj_norm.to(neg_direction.device)
+            neg_betas =  neg_betas / self.proj_norm.to(neg_direction.device)
 
             mask = (torch.abs(pos_betas) <= self.betas[global_step]) & (torch.abs(neg_betas) <= self.betas[global_step])
 
@@ -183,15 +183,14 @@ class CLIPLoss(pl.LightningModule):
 
 
 
-    def forward(self, pos_img: torch.Tensor, pos_embed: torch.Tensor, 
+    def directional_loss(self, pos_img: torch.Tensor, pos_embed: torch.Tensor, 
                 neg_img: torch.Tensor, neg_embed: torch.Tensor,
                 global_step):
         clip_loss = 0.0
-        if self.lambda_global:
-            raise "global CLIP loss is not implemented"
-            clip_loss += self.lambda_global * self.global_clip_loss(target_img, [f"a {target_class}"])
-
         if self.lambda_direction:
-            clip_loss += self.lambda_direction * self.clip_directional_loss(pos_img, pos_embed, neg_img, neg_embed, global_step=global_step, norm=self.norm)
+            clip_loss = self.lambda_direction * self.clip_directional_loss(pos_img, pos_embed, neg_img, neg_embed, global_step=global_step, norm=self.norm)
 
         return clip_loss
+    
+    def forward(self, *args, **kwargs):
+        return self.directional_loss(*args, **kwargs)

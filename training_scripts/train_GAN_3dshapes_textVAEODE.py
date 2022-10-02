@@ -174,7 +174,7 @@ transforms.Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.2613025
 
 	criterionGAN = GANLoss(use_lsgan=True, target_real_label=1.0)
 	criterionFeat = torch.nn.L1Loss()
-	criterionVGG = VGGLoss()
+	criterionVGG = VGGLoss().cuda()
 	criterionUnsupFactor = torch.nn.MSELoss()
 
 

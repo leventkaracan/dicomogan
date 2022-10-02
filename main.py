@@ -381,28 +381,36 @@ class ImageLogger(Callback):
         """
         grids = dict()
         for k in images:
-            if isinstance(images[k], torch.Tensor):
+            if isinstance(images[k], str):
+                continue
+            elif isinstance(images[k], torch.Tensor):
                 sz = images[k].shape[0]
                 grid = torchvision.utils.make_grid(images[k],
-                                nrow=min(int(sz ** 0.5), 4),
+                                nrow=sz//3,
                                 normalize=True,
                                 range=(-1, 1))
             else:
                 grid = images[k]
-            grids[f"{split}/{k}"] = wandb.Image(grid)
+            caption = None
+            if f'{k}_caption' in images:
+                caption = images[f'{k}_caption']
+
+            grids[f"{split}/{k}"] = wandb.Image(grid, caption=caption)
+            
         grids.update({"epoch":global_step})
         pl_module.logger.experiment.log(grids, commit=False)
 
     @rank_zero_only
     def _testtube(self, pl_module, images, batch_idx, split, global_step):
         for k in images:
-            if isinstance(images[k], torch.Tensor):
+            if isinstance(images[k], str):
+                continue
+            elif isinstance(images[k], torch.Tensor):
                  grid = torchvision.utils.make_grid(images[k])
                  grid = (grid+1.0)/2.0 # -1,1 -> 0,1; c,h,w
             else:
                 grid = images[k]
            
-
             tag = f"{split}/{k}"
             pl_module.logger.experiment.add_image(
                 tag, grid,
@@ -418,7 +426,9 @@ class ImageLogger(Callback):
         
         root = os.path.join(save_dir, "images", split)
         for k in images:
-            if isinstance(images[k], torch.Tensor):
+            if isinstance(images[k], str):
+                continue
+            elif isinstance(images[k], torch.Tensor):
                 grid = torchvision.utils.make_grid(images[k], nrow=4)
                 grid = (grid+1.0)/2.0 # -1,1 -> 0,1; c,h,w
                 grid = grid.transpose(0,1).transpose(1,2).squeeze(-1)
@@ -713,7 +723,7 @@ if __name__ == "__main__":
                 "target": "main.ImageLogger",
                 "params": {
                     "batch_frequency": 250, # 750
-                    "max_images": 16,
+                    "max_images": 1000, # 5 * 3 frames
                     "clamp": True
                 }
             },

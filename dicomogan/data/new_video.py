@@ -106,12 +106,16 @@ class VideoDataFashion(data.Dataset):
             return yaml.safe_load(f)
 
     def __getitem__(self, index):
+        return_list = {}
         # load text 
         rnd_txt = np.random.randint(len(self.desc_paths[index]))
         raw_desc = open(self.desc_paths[index][rnd_txt]).readlines()[0]
+        return_list['raw_desc'] = raw_desc
 
         # load attribute
-        attribute = self.attributes[index]
+        if self.attribute is not None:
+            attribute = self.attributes[index]
+            return_list['attribute'] = attribute
 
         # sample frames
         bin = index // self.batch_size
@@ -119,6 +123,7 @@ class VideoDataFashion(data.Dataset):
         sampleT = local_state.choice(self.frame_numbers[bin][1:], self.n_sampled_frames-1, replace=False)
         sampleT = np.append(sampleT, self.frame_numbers[bin][0])
         sampleT = np.sort(sampleT)
+        return_list['sampleT'] = sampleT
 
         I, W = None, None
         for i in sampleT:
@@ -134,7 +139,7 @@ class VideoDataFashion(data.Dataset):
                 w_vec = self.get_inversion(w_path)
                 W = w_vec if W is None else torch.cat([W, w_vec], dim=0)
         
-        return_list = {'img': I, 'raw_desc': raw_desc, "sampleT": sampleT, "attribute" : attribute, "index": index}
+        return_list['img']  = I
         if W is not None:
             return_list['inversion'] = W
 

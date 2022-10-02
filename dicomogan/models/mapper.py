@@ -128,17 +128,24 @@ class AttributeMapper(nn.Module):
             x_coarse = self.coarse_mapping(x_coarse, attribute_vector[:, :4, :], cut_flag=self.coarse_cut_flag)
         else:
             if self.predict_delta:
-                x_coarse = torch.zeros_like(x_coarse)
+                x_coarse = torch.zeros_like(x_coarse).detach()
+                x_coarse.requires_grad = False
+        
+        
         if self.use_medium_mapper:
             x_medium = self.medium_mapping(x_medium, attribute_vector[:, 4:8, :], cut_flag=self.medium_cut_flag)
         else:
             if self.predict_delta:
                 x_medium = torch.zeros_like(x_medium)
+                x_medium.requires_grad = False
+        
+        
         if self.use_fine_mapper:
-            if self.predict_delta:
-                x_fine = self.fine_mapping(x_fine, attribute_vector[:, 8:, :], cut_flag=self.fine_cut_flag)
+            x_fine = self.fine_mapping(x_fine, attribute_vector[:, 8:, :], cut_flag=self.fine_cut_flag)
         else:
-            x_fine = torch.zeros_like(x_fine)
+            if self.predict_delta:
+                x_fine = torch.zeros_like(x_fine)
+                x_fine.requires_grad = False
             
         output = torch.cat([x_coarse, x_medium, x_fine], dim=1)
         return output
