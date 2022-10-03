@@ -31,6 +31,7 @@ class VideoDataFashion(data.Dataset):
                     inversion_root=None,
                     attribute = None,
                     crop=None, size=None, onehot=True,
+                    irregular_sampling = False,
                     attribute_stats = 'data/fashion/attributes_stats.yaml'):
                     
         super(VideoDataFashion, self).__init__()
@@ -52,6 +53,7 @@ class VideoDataFashion(data.Dataset):
         self.batch_size = batch_size
         self.attribute = attribute
         self.onehot = onehot
+        self.irregular_sampling = irregular_sampling
         if self.attribute is not None:
             self.attribute_stats = self.load_yaml(attribute_stats)
 
@@ -120,11 +122,15 @@ class VideoDataFashion(data.Dataset):
         # sample frames
         bin = index // self.batch_size
         local_state = np.random.RandomState(bin + self.base_seed)
-        sampleT = local_state.choice(self.frame_numbers[bin][1:], self.n_sampled_frames-1, replace=False)
-        sampleT = np.append(sampleT, self.frame_numbers[bin][0])
-        sampleT = np.sort(sampleT)
-        return_list['sampleT'] = sampleT
+        if self.irregular_sampling:
+            sampleT = local_state.choice(self.frame_numbers[bin][1:], self.n_sampled_frames-1, replace=False)
+            sampleT = np.append(sampleT, self.frame_numbers[bin][0])
+            sampleT = np.sort(sampleT)
+        else:
+            st = local_state.randint(0, len(self.frame_numbers[bin])-self.n_sampled_frames)
+            sampleT = np.arange(st, st+self.n_sampled_frames)
 
+        return_list['sampleT'] = sampleT
         I, W = None, None
         for i in sampleT:
             Ii = self.get_image(self.data_paths[index][i])

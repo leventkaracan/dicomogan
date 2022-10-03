@@ -429,7 +429,7 @@ class EncoderVideo_LatentODE(nn.Module):
             delta_t = delta_t.unsqueeze(1).repeat((1,batch_size)).unsqueeze(-1) # concat time. Why not pos encoding?  # T x B x (D+1)
             h = torch.cat((delta_t, h),-1)
 
-        rnn_out, _ = self.rnn(h.float()) 
+        rnn_out, _ = self.rnn(h.float()) # this uses static and dynamic features
         #print(rnn_out.size())
         hd_z0 = rnn_out[-1] # B x D
         #hd_z0 = torch.tanh(hd_z0)

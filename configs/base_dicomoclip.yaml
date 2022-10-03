@@ -8,15 +8,15 @@ model:
   params:
     # tgt_text : 'Yellow Dresses Made from polyester with V-neckline. The dress is all over ribbed and has front buttons and is short sleeves. The dress is regular fit'
     delta_inversion_weight : 0.05
-    l2_latent_eps : 0.03
+    l2_latent_eps : 0.05
 
-    lambda_vgg: 1
+    lambda_vgg: 2.0
     lambda_G: 1
     lambda_bvae: 1
     rec_loss_lambda : 1.0
     l2_latent_lambda : 0.5
-    clip_loss_lambda : 5.0
-    consistency_lambda : 5.0
+    clip_loss_lambda : 10.0
+    consistency_lambda : 0.5
     
     vae_cond_dim : 8 # must match text encoder latent_dim
     beta: 8
@@ -78,7 +78,7 @@ model:
 data:
   target: main.DataModuleFromConfig
   params:
-    batch_size: 5 # MUST Match batch size in dataset
+    batch_size: 6 # MUST Match batch size in dataset
     num_workers: 10
     train:
       target: dicomogan.data.new_video.VideoDataFashion # Changed from data.video.VideoDataFashion to data.new_video.VideoDataFashion
@@ -87,7 +87,7 @@ data:
         img_root: /kuacc/users/abond19/datasets/inverted_fashion_dataset
         inversion_root: /kuacc/users/abond19/datasets/w+_fashion_dataset/fashion/PTI/
         n_sampled_frames : 3
-        batch_size : 5 #MUST match batch size 
+        batch_size : 6 #MUST match batch size 
         # crop : [512, 384]
         size : [256, 192]
         # attribute : "Color"
@@ -99,8 +99,8 @@ data:
         video_list: data/fashion/fashion_test_videos.txt
         img_root: /kuacc/users/abond19/datasets/inverted_fashion_dataset
         inversion_root: /kuacc/users/abond19/datasets/w+_fashion_dataset/fashion/PTI/
-        n_sampled_frames : 3
-        batch_size : 5 #MUST match batch size 
+        n_sampled_frames : 10
+        batch_size : 6 #MUST match batch size 
         # crop : [512, 384]
         size : [256, 192]
         # attribute : "Color"

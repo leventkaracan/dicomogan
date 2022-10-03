@@ -132,9 +132,26 @@ class CLIPLoss(pl.LightningModule):
             
     def clip_directional_loss(self, pos_img: torch.Tensor, pos_style_embed: torch.Tensor,
                              neg_img: torch.Tensor, ref_style_embed: torch.Tensor, 
-                             global_step: int, norm=True) -> torch.Tensor:
-        pos_encoding = self.get_image_features(pos_img, norm=norm)
-        neg_encoding = self.get_image_features(neg_img, norm=norm)
+                             global_step: int, norm=True, video=False) -> torch.Tensor:
+        if video:
+            # pos_img: B x T x C x H x W
+            # pos_style_embed: B x T x D
+            B,  T,  C,  H, W = pos_img.shape
+            pos_img = pos_img.reshape(B*T, C, H, W)
+            neg_img = neg_img.reshape(B*T, C, H, W)
+            pos_encoding = self.get_image_features(pos_img, norm=norm)
+            neg_encoding = self.get_image_features(neg_img, norm=norm)
+
+            pos_encoding = pos_encoding.view(B, T, -1).mean(1) # B x D
+            neg_encoding = neg_encoding.view(B, T, -1).mean(1)
+
+            # reduce style_embed
+            pos_style_embed = pos_style_embed.mean(1) # B x D
+            ref_style_embed = ref_style_embed.mean(1)
+
+        else:
+            pos_encoding = self.get_image_features(pos_img, norm=norm)
+            neg_encoding = self.get_image_features(neg_img, norm=norm)
 
         # normalize
         if norm:
@@ -173,6 +190,24 @@ class CLIPLoss(pl.LightningModule):
 
         return self.direction_loss(pos_direction, neg_direction).mean()
 
+    
+    def consistency_loss(self, generated_images, num_samples=10):
+        # generated_images B x T x C x H x W
+        num_samples = min(num_samples, generated_images.shape[1])
+        indices = np.random.choice(generated_images.shape[1], size=num_samples, replace=False)
+        generated_images = generated_images[:, indices]
+
+        bs, T, C, H, W = generated_images.shape
+        generated_images = generated_images.reshape(bs * T, C, H, W) 
+        embeds = self.encode_images(generated_images) # B  * num_samples x D
+        embeds = embeds.view(bs, T, -1)
+
+        clip_loss = 0
+        for i in range(1, num_samples):
+            clip_loss += (1 - F.cosine_similarity(embeds, torch.roll(embeds, i, 1), dim=-1))
+        return clip_loss.sum(1).mean()
+    
+    
     def global_clip_loss(self, img: torch.Tensor, embed) -> torch.Tensor:
         # TODO: fix         
         raise "not implemented"
@@ -184,11 +219,11 @@ class CLIPLoss(pl.LightningModule):
 
 
     def directional_loss(self, pos_img: torch.Tensor, pos_embed: torch.Tensor, 
-                neg_img: torch.Tensor, neg_embed: torch.Tensor,
-                global_step):
+                                neg_img: torch.Tensor, neg_embed: torch.Tensor,
+                                global_step, video=True):
         clip_loss = 0.0
         if self.lambda_direction:
-            clip_loss = self.lambda_direction * self.clip_directional_loss(pos_img, pos_embed, neg_img, neg_embed, global_step=global_step, norm=self.norm)
+            clip_loss = self.lambda_direction * self.clip_directional_loss(pos_img, pos_embed, neg_img, neg_embed, global_step=global_step, norm=self.norm, video=video)
 
         return clip_loss
     

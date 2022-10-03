@@ -155,8 +155,8 @@ class DiCoMOGANCLIP(pl.LightningModule):
         text = self.clip_loss.tokenize(texts).to(self.device)
         return self.clip_loss.encode_text(text).float()
     
-    def on_epoch_start(self,):
-            self.trainer.train_dataloader.dataset.datasets.base_seed = np.random.randint(1000000)
+    def on_train_epoch_start(self,):
+            self.trainer.train_dataloader.dataset.datasets.reset()
 
     def training_step(self, batch, batch_idx):
         input_desc = batch['raw_desc'] # B
@@ -252,22 +252,34 @@ class DiCoMOGANCLIP(pl.LightningModule):
         imgs_txt_mismatched_res = nn.functional.interpolate(imgs_txt_mismatched, size=(256, 192), mode="bicubic", align_corners=False)
 
         reconstruction_loss = self.rec_loss(reconstruction_res, video_sample_norm)
-        directional_clip_loss = self.clip_loss.directional_loss(video_sample_norm, txt_feat, imgs_txt_mismatched_res, txt_feat_mismatch, self.global_step)
         latent_loss = self.l2_latent_loss(inversions, w_latents)
         latent_loss += torch.maximum(self.l2_latent_loss(inversions, w_latents_txt_mismatched) - self.l2_latent_eps, torch.zeros(1).to(inversions.device)[0])
         vgg_loss = self.criterionVGG(reconstruction_res, video_sample_norm)
         
+        
+        # video based losses
+        txt_feat = txt_feat.reshape(T, bs, txt_feat.shape[1]) # T x B x D
+        txt_feat = txt_feat.permute(1, 0, 2).contiguous() # B x T x D
+
+        txt_feat_mismatch = txt_feat_mismatch.reshape(T, bs, txt_feat_mismatch.shape[1])
+        txt_feat_mismatch = txt_feat_mismatch.permute(1, 0, 2).contiguous()  # B x T x D
+
+        video_sample_norm = video_sample_norm.reshape(T, bs, video_sample_norm.shape[1], video_sample_norm.shape[2], video_sample_norm.shape[3])
+        video_sample_norm = video_sample_norm.permute(1, 0, 2, 3, 4).contiguous()  # B x T x C x H W 
+
+        reconstruction = reconstruction.reshape(T, bs, reconstruction.shape[1], reconstruction.shape[2], reconstruction.shape[3])
+        reconstruction = reconstruction.permute(1, 0, 2, 3, 4).contiguous()  # B x T x C x H W 
+
+        imgs_txt_mismatched = imgs_txt_mismatched.reshape(T, bs, imgs_txt_mismatched.shape[1], imgs_txt_mismatched.shape[2], imgs_txt_mismatched.shape[3])
+        imgs_txt_mismatched = imgs_txt_mismatched.permute(1, 0, 2, 3, 4).contiguous()   # B x T x C x H W 
+
+        # directional loss
+        directional_clip_loss = self.clip_loss.directional_loss(video_sample_norm, txt_feat, imgs_txt_mismatched_res, txt_feat_mismatch, self.global_step, video=True)
 
         # consistency loss
         consistency_loss = 0
-        # reconstruction = reconstruction.reshape(T, bs, reconstruction.shape[2], reconstruction.shape[3], reconstruction.shaep[4])
-        # reconstruction = reconstruction.permute(1, 0, 2, 3, 4)
-
-        # imgs_txt_mismatched = imgs_txt_mismatched.reshape(T, bs, imgs_txt_mismatched.shape[2], imgs_txt_mismatched.shape[3], imgs_txt_mismatched.shaep[4])
-        # imgs_txt_mismatched = imgs_txt_mismatched.permute(1, 0, 2, 3, 4)
-
-        # consistency_loss = self.consistency_loss(reconstruction)
-        # consistency_loss += self.consistency_loss(imgs_txt_mismatched)
+        consistency_loss = self.clip_loss.consistency_loss(reconstruction)
+        consistency_loss += self.clip_loss.consistency_loss(imgs_txt_mismatched)
 
         self.log("train/consistency_loss", consistency_loss, prog_bar=False, logger=True, on_step=True, on_epoch=False)
         self.log("train/vgg_loss", vgg_loss, prog_bar=False, logger=True, on_step=True, on_epoch=False)
@@ -279,6 +291,12 @@ class DiCoMOGANCLIP(pl.LightningModule):
         total_loss = self.lambda_bvae * beta_vae_loss + self.lambda_G * G_loss + self.lambda_vgg * vgg_loss + self.consistency_lambda * consistency_loss
         self.log("train/total_loss", total_loss, prog_bar=False, logger=True, on_step=True, on_epoch=False)
         return total_loss
+
+
+
+    def validation_step(self, batch, batch_idx):
+        pass
+
 
     def log_images(self, batch, split):
         """
