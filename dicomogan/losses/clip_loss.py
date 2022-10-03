@@ -137,15 +137,23 @@ class CLIPLoss(pl.LightningModule):
             # pos_img: B x T x C x H x W
             # pos_style_embed: B x T x D
             B,  T,  C,  H, W = pos_img.shape
-            pos_img = pos_img.reshape(B*T, C, H, W)
-            neg_img = neg_img.reshape(B*T, C, H, W)
+            pos_img = pos_img.contiguous().reshape(B*T, C, H, W)
+            neg_img = neg_img.contiguous().reshape(B*T, C, H, W)
             pos_encoding = self.get_image_features(pos_img, norm=norm)
             neg_encoding = self.get_image_features(neg_img, norm=norm)
+            
+            pos_encoding = pos_encoding.view(B, T, -1) # B x T x D
+            neg_encoding = neg_encoding.view(B, T, -1)
 
-            pos_encoding = pos_encoding.view(B, T, -1).mean(1) # B x D
-            neg_encoding = neg_encoding.view(B, T, -1).mean(1)
 
-            # reduce style_embed
+            # pos_encoding = pos_encoding.view(B * T, -1)
+            # neg_encoding = neg_encoding.view(B * T, -1)
+            # pos_style_embed = pos_style_embed.view(B*T, -1)
+            # ref_style_embed = ref_style_embed.view(B*T, -1)
+            
+            # # reduce
+            pos_encoding = pos_encoding.mean(1)
+            neg_encoding = neg_encoding.mean(1)
             pos_style_embed = pos_style_embed.mean(1) # B x D
             ref_style_embed = ref_style_embed.mean(1)
 
@@ -205,7 +213,7 @@ class CLIPLoss(pl.LightningModule):
         clip_loss = 0
         for i in range(1, num_samples):
             clip_loss += (1 - F.cosine_similarity(embeds, torch.roll(embeds, i, 1), dim=-1))
-        return clip_loss.sum(1).mean()
+        return clip_loss.mean().mean()
     
     
     def global_clip_loss(self, img: torch.Tensor, embed) -> torch.Tensor:
