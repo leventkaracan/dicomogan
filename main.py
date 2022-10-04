@@ -751,7 +751,7 @@ if __name__ == "__main__":
 
         print(trainer_opt)
         print(trainer_kwargs)
-        trainer = Trainer.from_argparse_args(trainer_opt, **trainer_kwargs, limit_val_batches=2, strategy=DDPPlugin(find_unused_parameters=True))
+        trainer = Trainer.from_argparse_args(trainer_opt, **trainer_kwargs, strategy=DDPPlugin(find_unused_parameters=True))
 
         # data
         data = instantiate_from_config(config.data)
