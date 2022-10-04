@@ -68,17 +68,17 @@ class VideoDataFashion(data.Dataset):
         data_paths, inverted_img_paths, inversion_paths, desc_paths, frame_numbers, attributes = [], [], [], [], [], []
         intersection = None
         for idx, vid_path in enumerate(self.video_list):
-            paths, im_paths, i_paths, d_paths, f_nums = {}, {}, [], [], []
+            paths, im_paths, i_paths, d_paths, f_nums = {}, {}, {}, [], []
             fname = vid_path[:-1]
             for f in sorted(os.listdir(os.path.join(self.img_root, fname)))[self.skip_frames:]:
                 if is_image_file(f):
                     imname = f[:-4]
                     paths[imname] = os.path.join(self.img_root, fname, f)
                     im_paths[imname] = os.path.join(self.inverted_img_root, fname, f)
-                    f_nums.append(int(imname))
+                    f_nums.append(imname)
 
                     if self.inversion_root is not None:
-                        i_paths.append(os.path.join(os.path.join(self.inversion_root, fname, imname + ".pt")))
+                        i_paths[imname] = os.path.join(os.path.join(self.inversion_root, fname, imname + ".pt"))
                 elif is_text_file(f):
                     d_paths.append(os.path.join(self.img_root, fname, f))
             
@@ -91,9 +91,9 @@ class VideoDataFashion(data.Dataset):
                     attr = self.to_onehot(self.attribute, attr)
                 attributes.append(attr)
             
-            data_paths.append(sorted(paths))
-            inverted_img_paths.append(sorted(im_paths))
-            inversion_paths.append(sorted(i_paths))
+            data_paths.append(paths)
+            inverted_img_paths.append(im_paths)
+            inversion_paths.append(i_paths)
             desc_paths.append(sorted(d_paths))
             intersection = set(sorted(f_nums)) if intersection is None else intersection.intersection(set(sorted(f_nums)))
             if (idx+1) % self.batch_size == 0:
@@ -135,7 +135,7 @@ class VideoDataFashion(data.Dataset):
             sampleT = np.sort(sampleT)
         else:
             st = local_state.randint(0, len(self.frame_numbers[bin])-self.n_sampled_frames)
-            sampleT = self.frame_numbers[st:st+self.n_sampled_frames]
+            sampleT = self.frame_numbers[bin][st:st+self.n_sampled_frames]
 
         return_list['sampleT'] = sampleT
         I, inv_I, W = None, None, None
