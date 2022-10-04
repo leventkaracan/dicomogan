@@ -73,12 +73,12 @@ class VideoDataFashion(data.Dataset):
             for f in sorted(os.listdir(os.path.join(self.img_root, fname)))[self.skip_frames:]:
                 if is_image_file(f):
                     imname = f[:-4]
-                    paths[imname] = os.path.join(self.img_root, fname, f)
-                    im_paths[imname] = os.path.join(self.inverted_img_root, fname, f)
-                    f_nums.append(imname)
+                    paths[int(imname)] = os.path.join(self.img_root, fname, f)
+                    im_paths[int(imname)] = os.path.join(self.inverted_img_root, fname, f)
+                    f_nums.append(int(imname))
 
                     if self.inversion_root is not None:
-                        i_paths[imname] = os.path.join(os.path.join(self.inversion_root, fname, imname + ".pt"))
+                        i_paths[int(imname)] = os.path.join(os.path.join(self.inversion_root, fname, imname + ".pt"))
                 elif is_text_file(f):
                     d_paths.append(os.path.join(self.img_root, fname, f))
             
@@ -135,9 +135,9 @@ class VideoDataFashion(data.Dataset):
             sampleT = np.sort(sampleT)
         else:
             st = local_state.randint(0, len(self.frame_numbers[bin])-self.n_sampled_frames)
-            sampleT = self.frame_numbers[bin][st:st+self.n_sampled_frames]
+            sampleT = np.array(self.frame_numbers[bin][st:st+self.n_sampled_frames])
 
-        return_list['sampleT'] = sampleT
+        
         I, inv_I, W = None, None, None
         for i in sampleT:
             # real image
@@ -163,6 +163,8 @@ class VideoDataFashion(data.Dataset):
         return_list['inverted_img'] = inv_I
         if W is not None:
             return_list['inversion'] = W
+        
+        return_list['sampleT'] = sampleT
 
         return return_list
 
