@@ -150,7 +150,7 @@ class CLIPLoss(pl.LightningModule):
             # neg_encoding = neg_encoding.view(B * T, -1)
             # pos_style_embed = pos_style_embed.view(B*T, -1)
             # ref_style_embed = ref_style_embed.view(B*T, -1)
-            
+
             # # reduce
             pos_encoding = pos_encoding.mean(1)
             neg_encoding = neg_encoding.mean(1)
@@ -228,7 +228,7 @@ class CLIPLoss(pl.LightningModule):
 
     def directional_loss(self, pos_img: torch.Tensor, pos_embed: torch.Tensor, 
                                 neg_img: torch.Tensor, neg_embed: torch.Tensor,
-                                global_step, video=True):
+                                global_step, video=False):
         clip_loss = 0.0
         if self.lambda_direction:
             clip_loss = self.lambda_direction * self.clip_directional_loss(pos_img, pos_embed, neg_img, neg_embed, global_step=global_step, norm=self.norm, video=video)

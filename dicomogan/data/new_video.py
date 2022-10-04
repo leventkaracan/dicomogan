@@ -1,3 +1,4 @@
+from tkinter import image_names
 from skimage import io, transform
 import os
 import numpy as np
@@ -26,12 +27,14 @@ def is_text_file(filename):
     return any(filename.endswith(extension) for extension in TXT_EXTENSIONS)
 
 class VideoDataFashion(data.Dataset):
-    def __init__(self, video_list, img_root, n_sampled_frames, 
+    def __init__(self, video_list, img_root, inverted_img_root,
+                    n_sampled_frames, 
                     batch_size, img_transform=None, 
                     inversion_root=None,
                     attribute = None,
                     crop=None, size=None, onehot=True,
-                    irregular_sampling = False,
+                    irregular_sampling = True,
+                    skip_frames = 0,
                     attribute_stats = 'data/fashion/attributes_stats.yaml'):
                     
         super(VideoDataFashion, self).__init__()
@@ -49,7 +52,9 @@ class VideoDataFashion(data.Dataset):
         self.img_root = img_root
         self.video_list = open(video_list).readlines()
         self.inversion_root = inversion_root
+        self.inverted_img_root = inverted_img_root
         self.n_sampled_frames = n_sampled_frames   
+        self.skip_frames = skip_frames
         self.batch_size = batch_size
         self.attribute = attribute
         self.onehot = onehot
@@ -57,18 +62,19 @@ class VideoDataFashion(data.Dataset):
         if self.attribute is not None:
             self.attribute_stats = self.load_yaml(attribute_stats)
 
-        self.data_paths, self.inversion_paths, self.desc_paths, self.frame_numbers, self.attributes = self._load_dataset()        
+        self.data_paths, self.inverted_img_paths, self.inversion_paths, self.desc_paths, self.frame_numbers, self.attributes = self._load_dataset()        
 
     def _load_dataset(self):
-        data_paths, inversion_paths, desc_paths, frame_numbers, attributes = [], [], [], [], []
+        data_paths, inverted_img_paths, inversion_paths, desc_paths, frame_numbers, attributes = [], [], [], [], [], []
         intersection = None
         for idx, vid_path in enumerate(self.video_list):
-            paths, i_paths, d_paths, f_nums = [], [], [], []
+            paths, im_paths, i_paths, d_paths, f_nums = {}, {}, [], [], []
             fname = vid_path[:-1]
-            for f in sorted(os.listdir(os.path.join(self.img_root, fname))):
+            for f in sorted(os.listdir(os.path.join(self.img_root, fname)))[self.skip_frames:]:
                 if is_image_file(f):
                     imname = f[:-4]
-                    paths.append(os.path.join(self.img_root, fname, f))
+                    paths[imname] = os.path.join(self.img_root, fname, f)
+                    im_paths[imname] = os.path.join(self.inverted_img_root, fname, f)
                     f_nums.append(int(imname))
 
                     if self.inversion_root is not None:
@@ -86,6 +92,7 @@ class VideoDataFashion(data.Dataset):
                 attributes.append(attr)
             
             data_paths.append(sorted(paths))
+            inverted_img_paths.append(sorted(im_paths))
             inversion_paths.append(sorted(i_paths))
             desc_paths.append(sorted(d_paths))
             intersection = set(sorted(f_nums)) if intersection is None else intersection.intersection(set(sorted(f_nums)))
@@ -95,7 +102,7 @@ class VideoDataFashion(data.Dataset):
 
         if intersection is not None:
             frame_numbers.append(sorted(list(intersection)))
-        return data_paths, inversion_paths, desc_paths, frame_numbers, attributes
+        return data_paths, inverted_img_paths, inversion_paths, desc_paths, frame_numbers, attributes
 
     
     def to_onehot(self, attr, val):
@@ -128,15 +135,22 @@ class VideoDataFashion(data.Dataset):
             sampleT = np.sort(sampleT)
         else:
             st = local_state.randint(0, len(self.frame_numbers[bin])-self.n_sampled_frames)
-            sampleT = np.arange(st, st+self.n_sampled_frames)
+            sampleT = self.frame_numbers[st:st+self.n_sampled_frames]
 
         return_list['sampleT'] = sampleT
-        I, W = None, None
+        I, inv_I, W = None, None, None
         for i in sampleT:
+            # real image
             Ii = self.get_image(self.data_paths[index][i])
             Ii = self.img_transform(Ii)
             Ii = torch.unsqueeze(Ii, 0)
             I = Ii if I is None else torch.cat([I, Ii], dim=0)
+
+            # inverted image
+            Ii = self.get_image(self.inverted_img_paths[index][i])
+            Ii = self.img_transform(Ii)
+            Ii = torch.unsqueeze(Ii, 0)
+            inv_I = Ii if inv_I is None else torch.cat([inv_I, Ii], dim=0)
 
             # Getting the inversion
             if self.inversion_root is not None:
@@ -145,7 +159,8 @@ class VideoDataFashion(data.Dataset):
                 w_vec = self.get_inversion(w_path)
                 W = w_vec if W is None else torch.cat([W, w_vec], dim=0)
         
-        return_list['img']  = I
+        return_list['real_img']  = I
+        return_list['inverted_img'] = inv_I
         if W is not None:
             return_list['inversion'] = W
 
@@ -156,7 +171,7 @@ class VideoDataFashion(data.Dataset):
 
         # permute indecies
         self.video_list = np.random.permutation(self.video_list)
-        self.data_paths, self.inversion_paths, self.desc_paths, self.frame_numbers, self.attributes = self._load_dataset()
+        self.data_paths, self.inverted_img_paths, self.inversion_paths, self.desc_paths, self.frame_numbers, self.attributes = self._load_dataset()
 
     def get_image(self, img_path):
         img = Image.open(img_path).convert('RGB')
