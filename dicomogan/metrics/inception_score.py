@@ -77,7 +77,7 @@ def batch_inception_score(imgs, cuda=True, resize=False, splits=1):
 
     return np.mean(split_scores), np.std(split_scores)
 
-def inception_score(imgs, cuda=True, batch_size=32, resize=False, splits=1):
+def inception_score(imgs, cuda=True, batch_size=1, resize=False, splits=1):
     """Computes the inception score of the generated images imgs
 
     imgs -- Torch dataset of (3xHxW) numpy images normalized in the range [-1, 1]
@@ -118,7 +118,7 @@ def inception_score(imgs, cuda=True, batch_size=32, resize=False, splits=1):
         batch = batch.type(dtype)
         batchv = Variable(batch)
         batch_size_i = batch.size()[0]
-        print(i)
+        #print(i)
         preds[i*batch_size:i*batch_size + batch_size_i] = get_pred(batchv)
 
     # Now compute the mean kl-div
