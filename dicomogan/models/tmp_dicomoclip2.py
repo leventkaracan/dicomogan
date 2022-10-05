@@ -4,6 +4,7 @@ import argparse
 import numpy as np
 import torch
 import torch.nn as nn
+import wandb
 from torch.nn import functional as F
 import torch.utils.data as data
 import torch.optim.lr_scheduler as lr_scheduler
@@ -18,7 +19,6 @@ from dicomogan.metrics.frechet_video_distance.frechet_video_distance import frec
 import os
 from PIL import Image
 import random
-from PIL import Image
 import math
 
 class DiCoMOGANCLIP(pl.LightningModule):
@@ -542,14 +542,34 @@ class DiCoMOGANCLIP(pl.LightningModule):
         ret['x_recon_vae_text'] = self.bVAE_dec(torch.cat((zT,z_vid[:, self.vae_cond_dim:]), 1)) * 2 - 1 # T*B x C x H x W
         ret['x_recon_vae'] = self.bVAE_dec(z_vid) * 2 - 1 # T*B x C x H x W
         ret['vae_mismatched_video_style'] = self.bVAE_dec(torch.cat((torch.roll(z_vid[:, :self.vae_cond_dim], 1, dims=1), z_vid[:, self.vae_cond_dim:]), 1)) * 2 - 1 # T*B x C x H x W
-        ret['x_recon_gan']  = self.stylegan_G(w_latents)
-        ret['x_mismatch_text']  = self.stylegan_G(w_latents_txt_mismatched)
+        recon_gan = self.stylegan_G(w_latents)
+        mismatched_gan = self.stylegan_G(w_latents_txt_mismatched)
+        
+        ret['x_recon_gan']  = recon_gan
+        ret['x_mismatch_text']  = mismatched_gan
 
-        # if split == 'val':
-        #     # TODO: create gif instead of frames
-        #     pass
+        if split == 'val':
+             # TODO: create gif instead of frames
+            gifs = []
+            if not os.path.exists("./tmp/"):
+                os.mkdir("./tmp/")
+            
+            self.log_gif(recon_gan, (3, 3, 3, 1024, 512), "recon")
+            self.log_gif(mismatched_gan, (3, 3, 3, 1024, 512), "mismatched")
         return ret
 
+    
+    def log_gif(self, video, shape, type):
+        # Assuming that the current shape is T * B x C x H x W
+        video_correct = video.contiguous().reshape(shape[1], shape[0], shape[2], shape[3], shape[4])
+        video_correct = (((video_correct.permute(1, 0, 3, 4, 2).cpu().numpy() + 1) / 2) * 255).astype(np.uint8)
+        print(np.max(video_correct), np.min(video_correct))
+
+        for i in range(shape[0]):
+            current_video = video_correct[i]
+            imgs = [Image.fromarray(img) for img in current_video]
+            imgs[0].save("./tmp/temp.gif", save_all=True, append_images=imgs[1:], duration=50, loop=0)
+            wandb.log({f"val/gif_{type}": wandb.Video("./tmp/temp.gif", fps=4, format="gif")})
 
 
     def configure_optimizers(self):
