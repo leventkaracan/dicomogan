@@ -387,8 +387,8 @@ class DiCoMOGANCLIP(pl.LightningModule):
         clip_metric_mismatched = clip_score(self.clip_loss, imgs_txt_mismatched_inp_res, txt_feat_mismatch, fake_img=True)
         clip_metric_original = clip_score(self.clip_loss, video_sample, txt_feat, fake_img=False)
 
-        reconstruction_inp_res = reconstruction_inp_res.cpu()
-        imgs_txt_mismatched_inp_res = imgs_txt_mismatched_inp_res.cpu()
+        #reconstruction_inp_res = reconstruction_inp_res.cpu()
+        #imgs_txt_mismatched_inp_res = imgs_txt_mismatched_inp_res.cpu()
         txt_feat = txt_feat.cpu()
         txt_feat_mismatch = txt_feat_mismatch.cpu()
 
@@ -407,9 +407,9 @@ class DiCoMOGANCLIP(pl.LightningModule):
         return_dict['clip_recon'] = clip_metric_recon
         return_dict['clip_mismatched'] = clip_metric_mismatched
         return_dict['clip_original'] = clip_metric_original
-        #return_dict['original_imgs'] = video_sample.reshape(bs, n_frames, ch, height, width)
-        #return_dict['recon_imgs'] = reconstruction_inp_res.reshape(bs, n_frames, video_sample.shape[1], video_sample.shape[2], video_sample.shape[3])
-        #return_dict['mismatched_imgs'] = imgs_txt_mismatched_inp_res.reshape(bs, n_frames, video_sample.shape[1], video_sample.shape[2], video_sample.shape[3])
+        return_dict['original_imgs'] = video_sample.reshape(bs, n_frames, ch, height, width)
+        return_dict['recon_imgs'] = reconstruction_inp_res.reshape(bs, n_frames, video_sample.shape[1], video_sample.shape[2], video_sample.shape[3])
+        return_dict['mismatched_imgs'] = imgs_txt_mismatched_inp_res.reshape(bs, n_frames, video_sample.shape[1], video_sample.shape[2], video_sample.shape[3])
 
         return return_dict
 
@@ -421,9 +421,9 @@ class DiCoMOGANCLIP(pl.LightningModule):
         total_clip_mismatched = []
         total_clip_original = []
 
-        #all_originals = []
-        #recon_imgs = []
-        #mismatched_imgs = []
+        all_originals = []
+        recon_imgs = []
+        mismatched_imgs = []
 
         for output in validation_step_outputs:
             total_is_recon.append(output['is_recon'])
@@ -432,24 +432,28 @@ class DiCoMOGANCLIP(pl.LightningModule):
             total_clip_recon.append(output['clip_recon'])
             total_clip_mismatched.append(output['clip_mismatched'])
             total_clip_original.append(output['clip_original'])
-            #all_originals.append(output['original_imgs'])
-            #recon_imgs.append(output['recon_imgs'])
-            #mismatched_imgs.append(output['mismatched_imgs'])
+            all_originals.append(output['original_imgs'])
+            recon_imgs.append(output['recon_imgs'])
+            mismatched_imgs.append(output['mismatched_imgs'])
 
 
-        #all_originals = torch.stack(all_originals, dim=0)
-        #recon_imgs = torch.stack(recon_imgs, dim=0)
-        #mismatched_imgs = torch.stack(mismatched_imgs, dim=0)
+        all_originals = torch.stack(all_originals, dim=0)
+        recon_imgs = torch.stack(recon_imgs, dim=0)
+        mismatched_imgs = torch.stack(mismatched_imgs, dim=0)
 
-        #num_batches, batch_size, n_frames, ch, height, width = all_originals.shape
-        #all_originals = all_originals.reshape(num_batches * batch_size, n_frames, ch, height, width)
-        #recon_imgs = recon_imgs.reshape(num_batches * batch_size, n_frames, ch, height, width)
-        #mismatched_imgs = mismatched_imgs.reshape(num_batches * batch_size, n_frames, ch, height, width)
+        num_batches, batch_size, n_frames, ch, height, width = all_originals.shape
+        all_originals = all_originals.reshape(num_batches * batch_size, n_frames, ch, height, width)
+        recon_imgs = recon_imgs.reshape(num_batches * batch_size, n_frames, ch, height, width)
+        mismatched_imgs = mismatched_imgs.reshape(num_batches * batch_size, n_frames, ch, height, width)
 
-        #model_path = "/kuacc/users/abond19/VideoEditing/dicomogan/dicomogan/metrics/frechet_video_distance/pytorch_i3d_model/models/rgb_imagenet.pt"
+        model_path = "/kuacc/users/abond19/VideoEditing/dicomogan/dicomogan/metrics/frechet_video_distance/pytorch_i3d_model/models/rgb_imagenet.pt"
 
-        #recon_fvd = frechet_video_distance(all_originals, recon_imgs, model_path)
-        #mismatched_fvd = frechet_video_distance(all_originals, mismatched_imgs, model_path)
+        #print(f"Originals shape: {all_originals.shape}")
+        #print(f"Reconstruction shape: {recon_imgs.shape}")
+        #print(f"Mismatched shape: {mismatched_imgs.shape}")
+
+        recon_fvd = frechet_video_distance(all_originals, recon_imgs, model_path, self.device)
+        mismatched_fvd = frechet_video_distance(all_originals, mismatched_imgs, model_path, self.device)
 
         self.log("val/mean_inception_recon", np.array(total_is_recon).mean(), prog_bar=False, logger=True, on_step=False, on_epoch=True)
         self.log("val/mean_inception_mismatched", np.array(total_is_mismatched).mean(), prog_bar=False, logger=True, on_step=False, on_epoch=True)
@@ -457,8 +461,8 @@ class DiCoMOGANCLIP(pl.LightningModule):
         self.log("val/mean_clip_recon", np.array(total_clip_recon).mean(), prog_bar=False, logger=True, on_step=False, on_epoch=True)
         self.log("val/mean_clip_mismatched", np.array(total_clip_mismatched).mean(), prog_bar=False, logger=True, on_step=False, on_epoch=True)
         self.log("val/mean_clip_original", np.array(total_clip_original).mean(), prog_bar=False, logger=True, on_step=False, on_epoch=True)
-        #self.log("val/recon_fvd", recon_fvd, prog_bar=False, logger=True, on_step=False, on_epoch=True)
-        #self.log("val/mismatched_fvd", mismatched_fvd, prog_bar=False, logger=True, on_step=False, on_epoch=True)
+        self.log("val/recon_fvd", recon_fvd, prog_bar=False, logger=True, on_step=False, on_epoch=True)
+        self.log("val/mismatched_fvd", mismatched_fvd, prog_bar=False, logger=True, on_step=False, on_epoch=True)
 
 
     def log_images(self, batch, split):

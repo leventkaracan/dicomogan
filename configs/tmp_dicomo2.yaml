@@ -96,6 +96,8 @@ data:
         # attribute : "Color"
         attribute_stats : 'data/fashion/attributes_stats.yaml'
 
+    # Validation using FVD needs to have batch size 3 and sampled frames 3 for memory purposes
+    # In order to do more, comment out FVD
     validation:
       target: dicomogan.data.new_video.VideoDataFashion # Changed from data.video.VideoDataFashion to data.new_video.VideoDataFashion
       params:
@@ -115,5 +117,5 @@ data:
 
 lightning:
   trainer:
-    limit_val_batches : 100
+    limit_val_batches : 10
     replace_sampler_ddp : False
