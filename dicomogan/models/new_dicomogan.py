@@ -31,6 +31,8 @@ class New_DiCoMOGAN(pl.LightningModule):
                 clip_loss_lambda=1.0,
                 l2_latent_eps = 1.0,
                 tgt_text = None,
+                ckpt_path = None, 
+                ignore_keys=[],
                 n_critic = 1):
         super(New_DiCoMOGAN, self).__init__()
 
@@ -66,6 +68,21 @@ class New_DiCoMOGAN(pl.LightningModule):
 
         self.scheduler_config = scheduler_config
         
+        if ckpt_path is not None:
+            self.init_from_ckpt(ckpt_path, ignore_keys=ignore_keys)
+        
+
+    def init_from_ckpt(self, path, ignore_keys=list()):
+        sd = torch.load(path, map_location="cpu")["state_dict"]
+        keys = list(sd.keys())
+        for k in keys:
+            for ik in ignore_keys:
+                if k.startswith(ik):
+                    print("Deleting key {} from state_dict.".format(k))
+                    del sd[k]
+        self.load_state_dict(sd, strict=False)
+        print(f"Restored from {path}")
+
     def requires_grad(self, model, flag=True):
         for p in model.parameters():
             p.requires_grad = flag
