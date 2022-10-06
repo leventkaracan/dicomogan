@@ -155,6 +155,17 @@ class DiCoMOGANCLIP(pl.LightningModule):
         text = self.clip_loss.tokenize(texts).to(self.device)
         return self.clip_loss.encode_text(text).float()
     
+    def init_from_ckpt(self, path, ignore_keys=list()):
+        sd = torch.load(path, map_location="cpu")["state_dict"]
+        keys = list(sd.keys())
+        for k in keys:
+            for ik in ignore_keys:
+                if k.startswith(ik):
+                    print("Deleting key {} from state_dict.".format(k))
+                    del sd[k]
+        self.load_state_dict(sd, strict=False)
+        print(f"Restored from {path}")
+
     def on_train_epoch_start(self,):
             self.trainer.train_dataloader.dataset.datasets.reset()
 
@@ -237,15 +248,15 @@ class DiCoMOGANCLIP(pl.LightningModule):
         # roll batch-wise
         txt_feat_mismatch, _ = self.preprocess_text_feat(txt_feat, mx_roll=bs) # T*B x D2
         
-        frame_rep = torch.cat((latentw, txt_feat), -1) # T*B x D1+D2
-        frame_rep_txt_mismatched = torch.cat((latentw, txt_feat_mismatch), -1) # T*B x D1+D2
+        frame_rep = (latentw, txt_feat) # T*B x D1+D2
+        frame_rep_txt_mismatched = (latentw, txt_feat_mismatch) # T*B x D1+D2
 
         # predict latents delta
         src_inversion = inversions_tf.mean(0, keepdims=True) # 1 x B x 18 x 512
         src_inversion_tf = src_inversion.repeat(T, 1, 1, 1)
         src_inversion = src_inversion_tf.reshape(T*bs, n_channels, dim)
-        w_latents = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, frame_rep)
-        w_latents_txt_mismatched = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, frame_rep_txt_mismatched)
+        w_latents = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, *frame_rep)
+        w_latents_txt_mismatched = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, *frame_rep_txt_mismatched)
 
         reconstruction = self.stylegan_G(w_latents) # T*B x 3 x H x W
         imgs_txt_mismatched = self.stylegan_G(w_latents_txt_mismatched) # T*B x 3 x H x W
@@ -361,15 +372,15 @@ class DiCoMOGANCLIP(pl.LightningModule):
         # roll batch-wise
         mismatch_txt_feat, _ = self.preprocess_text_feat(txt_feat, mx_roll=2)
 
-        frame_rep = torch.cat((latentw, txt_feat), -1) # T*B x D1+D2
-        frame_rep_txt_mismatched = torch.cat((latentw, mismatch_txt_feat), -1) # T*B x D1+D2
+        frame_rep = (latentw, txt_feat) # T*B x D1+D2
+        frame_rep_txt_mismatched = (latentw, mismatch_txt_feat) # T*B x D1+D2
 
         # predict latents delta
         src_inversion = inversions_tf.mean(0, keepdims=True) # 1 x B x 18 x 512
         src_inversion_tf = src_inversion.repeat(T, 1, 1, 1)
         src_inversion = src_inversion_tf.reshape(T*bs, n_channels, dim)
-        w_latents = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, frame_rep)
-        w_latents_txt_mismatched = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, frame_rep_txt_mismatched)
+        w_latents = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, *frame_rep)
+        w_latents_txt_mismatched = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, *frame_rep_txt_mismatched)
 
         ret['real_image'] = video_sample_norm 
         ret['inverted_image'] = inverted_vid_norm 
