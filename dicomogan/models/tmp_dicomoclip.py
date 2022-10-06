@@ -42,6 +42,8 @@ class DiCoMOGANCLIP(pl.LightningModule):
                     custom_loggers = None,
                     tgt_text = None,
                     n_critic = 1,
+                    ckpt_path=None,
+                    ignore_keys=[], 
                     ):
         super().__init__()
         self.clip_img_transform = transforms.Compose([
@@ -89,6 +91,9 @@ class DiCoMOGANCLIP(pl.LightningModule):
         self.tgt_text_embed = None
         if tgt_text is not None:
             self.tgt_text_embed = self.clip_encode_text([tgt_text]) # 1 x 512
+        
+        if ckpt_path is not None:
+            self.init_from_ckpt(ckpt_path, ignore_keys=ignore_keys)
 
     def requires_grad(self, model, flag=True):
         for p in model.parameters():
