@@ -89,7 +89,7 @@ data:
         inversion_root: /kuacc/users/abond19/datasets/w+_fashion_dataset/fashion/PTI/
         skip_frames : 5
         n_sampled_frames : 6
-        irregular_samling : True
+        irregular_sampling : True
         batch_size : 3 #MUST match batch size 
         # crop : [512, 384]
         size : [256, 192]

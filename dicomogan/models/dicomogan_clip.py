@@ -346,6 +346,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         ret['image_caption'] = '\n'.join([f"Col_{i}: {el}" for i, el in enumerate(batch['raw_desc'])])
         ret['x_recon_vae_text'] = self.bVAE_dec(torch.cat((zT,z_vid[:, self.vae_cond_dim:]), 1)) * 2 - 1 # T*B x C x H x W
         ret['x_recon_vae'] = self.bVAE_dec(z_vid) * 2 - 1 # T*B x C x H x W
+        ret['vae_mismatched_video_style'] = self.bVAE_dec(torch.cat((torch.roll(z_vid[:, :self.vae_cond_dim], 1, dims=1), z_vid[:, self.vae_cond_dim:]), 1)) * 2 - 1 # T*B x C x H x W
 
         # generate with mathching text
         latentw = self.mapping(z_vid[:,self.vae_cond_dim:])

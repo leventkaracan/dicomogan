@@ -80,10 +80,8 @@ def get_ckpt_path(dic):
     name = dic.split('/')[-1]
     if name in paths:
         return get_ckpt_path(os.path.join(dic, name))
-    elif 'CelebAHQ-VQGAN' in paths:
-        return get_ckpt_path(os.path.join(dic, 'CelebAHQ-VQGAN'))
-    elif 'ImageManipulation' in paths:
-        return get_ckpt_path(os.path.join(dic, 'ImageManipulation'))
+    elif 'VideoManipulation' in paths:
+        return get_ckpt_path(os.path.join(dic, 'VideoManipulation'))
     elif 'checkpoints' in paths:
         return get_ckpt_path(os.path.join(dic, 'checkpoints'))
     elif os.path.isfile(os.path.join(dic, paths[0])):
