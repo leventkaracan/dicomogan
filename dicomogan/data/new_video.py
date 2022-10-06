@@ -137,7 +137,7 @@ class VideoDataFashion(data.Dataset):
             st = local_state.randint(0, len(self.frame_numbers[bin])-self.n_sampled_frames)
             sampleT = np.array(self.frame_numbers[bin][st:st+self.n_sampled_frames])
 
-        return_list['sampleT'] = sampleT
+        
         I, inv_I, W = None, None, None
         for i in sampleT:
             # real image
@@ -163,6 +163,8 @@ class VideoDataFashion(data.Dataset):
         return_list['inverted_img'] = inv_I
         if W is not None:
             return_list['inversion'] = W
+        
+        return_list['sampleT'] = sampleT
 
         return return_list
 
