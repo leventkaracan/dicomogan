@@ -11,7 +11,8 @@ from torchsummary import summary
 
 def preprocess(videos, target_resolution):
     #reshaped_videos = videos.permute(0, 4, 1, 2, 3)
-    reshaped_videos = videos.permute(0, 1, 3, 4, 2)
+    #reshaped_videos = videos.permute(0, 1, 3, 4, 2)
+    reshaped_videos = videos.permute(0, 2, 1, 3, 4)
     size = [reshaped_videos.size()[2]] + list(target_resolution)
     resized_videos = interpolate(reshaped_videos, size=size, mode='trilinear', align_corners=False)
     scaled_videos = 2 * resized_videos / 255. - 1
@@ -72,3 +73,6 @@ def frechet_video_distance(first_set_of_videos, second_set_of_videos, path_to_mo
     second_preprocessed = preprocess(second_set_of_videos, (224, 224))
     second_activations = get_activations(second_preprocessed, i3d)
     return calculate_fvd_from_activations(first_activations, second_activations)
+
+def get_activations_batch(data, model):
+    return model(data).squeeze().cpu().numpy()

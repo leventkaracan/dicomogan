@@ -560,6 +560,11 @@ class DiCoMOGANCLIP(pl.LightningModule):
 
     
     def log_gif(self, video, shape, type):
+        #import imageio
+        #with imageio.get_writer(f'{save_path}.gif', mode='I') as writer:
+        #    for img in img_lst:
+        #        writer.append_data(np.array(img))
+
         # Assuming that the current shape is T * B x C x H x W
         video_correct = video.contiguous().reshape(shape[1], shape[0], shape[2], shape[3], shape[4])
         video_correct = (((video_correct.permute(1, 0, 3, 4, 2).cpu().numpy() + 1) / 2) * 255).astype(np.uint8)
