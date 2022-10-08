@@ -253,15 +253,15 @@ class DiCoMOGANCLIP(pl.LightningModule):
         # roll batch-wise
         txt_feat_mismatch, _ = self.preprocess_text_feat(txt_feat, mx_roll=bs) # T*B x D2
         
-        frame_rep = (latentw, txt_feat) # T*B x D1+D2
-        frame_rep_txt_mismatched = (latentw, txt_feat_mismatch) # T*B x D1+D2
+        frame_rep = torch.cat((latentw, txt_feat), -1) # T*B x D1+D2
+        frame_rep_txt_mismatched = torch.cat((latentw, txt_feat_mismatch), -1) # T*B x D1+D2
 
         # predict latents delta
         src_inversion = inversions_tf.mean(0, keepdims=True) # 1 x B x 18 x 512
         src_inversion_tf = src_inversion.repeat(T, 1, 1, 1)
         src_inversion = src_inversion_tf.reshape(T*bs, n_channels, dim)
-        w_latents = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, *frame_rep)
-        w_latents_txt_mismatched = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, *frame_rep_txt_mismatched)
+        w_latents = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, frame_rep)
+        w_latents_txt_mismatched = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, frame_rep_txt_mismatched)
 
         reconstruction = self.stylegan_G(w_latents) # T*B x 3 x H x W
         imgs_txt_mismatched = self.stylegan_G(w_latents_txt_mismatched) # T*B x 3 x H x W
@@ -324,7 +324,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         ret = dict()
 
         vid = batch['real_img'] # B x T x ch x H x W -- range [0, 1]
-        inverted_vid_bf = batch['inverted_img'] # B x T x ch x H x W -- range [0, 1]
+        # inverted_vid_bf = batch['inverted_img '] # B x T x ch x H x W -- range [0, 1]
         input_desc = batch['raw_desc'] 
         sampleT = batch['sampleT'] # B x T 
         assert torch.all(sampleT[0] == sampleT[np.random.randint(sampleT.size(0)-1)+1])
@@ -334,9 +334,9 @@ class DiCoMOGANCLIP(pl.LightningModule):
         ts = (sampleT)*0.01
         ts = ts - ts[0] 
         
-        inverted_vid_tf = inverted_vid_bf.permute(1,0,2,3,4) # T x B x C x H x W 
-        inverted_vid = inverted_vid_tf.contiguous().view(n_frames * bs, ch, height, width) # T*B x C x H x W 
-        inverted_vid_norm = inverted_vid * 2 - 1 # range [-1, 1] to pass to the generator and disc
+        # inverted_vid_tf = inverted_vid_bf.permute(1,0,2,3,4) # T x B x C x H x W 
+        # inverted_vid = inverted_vid_tf.contiguous().view(n_frames * bs, ch, height, width) # T*B x C x H x W 
+        # inverted_vid_norm = inverted_vid * 2 - 1 # range [-1, 1] to pass to the generator and disc
 
         video_sample = vid # B x T x C x H x W 
         video_sample = video_sample.permute(1,0,2,3,4) # T x B x C x H x W 
@@ -377,18 +377,18 @@ class DiCoMOGANCLIP(pl.LightningModule):
         # roll batch-wise
         mismatch_txt_feat, _ = self.preprocess_text_feat(txt_feat, mx_roll=2)
 
-        frame_rep = (latentw, txt_feat) # T*B x D1+D2
-        frame_rep_txt_mismatched = (latentw, mismatch_txt_feat) # T*B x D1+D2
+        frame_rep = torch.cat((latentw, txt_feat), -1) # T*B x D1+D2
+        frame_rep_txt_mismatched = torch.cat((latentw, mismatch_txt_feat), -1) # T*B x D1+D2
 
         # predict latents delta
         src_inversion = inversions_tf.mean(0, keepdims=True) # 1 x B x 18 x 512
         src_inversion_tf = src_inversion.repeat(T, 1, 1, 1)
         src_inversion = src_inversion_tf.reshape(T*bs, n_channels, dim)
-        w_latents = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, *frame_rep)
-        w_latents_txt_mismatched = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, *frame_rep_txt_mismatched)
+        w_latents = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, frame_rep)
+        w_latents_txt_mismatched = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, frame_rep_txt_mismatched)
 
         ret['real_image'] = video_sample_norm 
-        ret['inverted_image'] = inverted_vid_norm 
+        # ret['inverted_image'] = inverted_vid_norm 
         ret['real_image_caption'] = '\n'.join([f"Col_{i}: {el}" for i, el in enumerate(batch['raw_desc'])])
         
         ret['x_recon_vae_text'] = self.bVAE_dec(torch.cat((zT,z_vid[:, self.vae_cond_dim:]), 1)) * 2 - 1 # T*B x C x H x W

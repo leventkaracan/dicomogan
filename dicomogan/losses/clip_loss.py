@@ -66,7 +66,7 @@ class CLIPLoss(pl.LightningModule):
                     direction_loss_type='cosine', clip_model='ViT-B/32', 
                     projection_direction=None, norm=True,
                     **kwargs):
-        super(CLIPLoss, self).__init__()
+        super().__init__()
         self.model, clip_preprocess = clip.load(clip_model, device=self.device)
         self.norm = norm
         # freeze clip model

@@ -1079,7 +1079,7 @@ class NLayerDiscriminatorPix2pixHD(nn.Module):
 
 class Vgg19(torch.nn.Module):
 	def __init__(self, requires_grad=False):
-		super(Vgg19, self).__init__()
+		super().__init__()
 		vgg_pretrained_features = models.vgg19(pretrained=True).features
 		self.slice1 = torch.nn.Sequential()
 		self.slice2 = torch.nn.Sequential()
