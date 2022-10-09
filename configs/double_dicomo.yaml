@@ -24,15 +24,15 @@ model:
     ODE_func_config:
       target: dicomogan.modules.LatentODEfunc
       params:
-        latent_dim : 8 # must match dynamic_latent_dim
+        latent_dim : 32 # must match dynamic_latent_dim
         nhidden : 20 
 
     video_ecnoder_config:
       target: dicomogan.modules.EncoderVideo_LatentODE
       params:
         img_size : [3,128,96] # must match video_decoder
-        static_latent_dim : 24
-        dynamic_latent_dim : 8 # must match ODE_func_config latent_dim
+        static_latent_dim : 48
+        dynamic_latent_dim : 32 # must match ODE_func_config latent_dim
         hid_channels : 32 
         kernel_size : 4
         hidden_dim : 256
@@ -41,7 +41,7 @@ model:
       target: dicomogan.modules.Decoder
       params:
         img_size : [3,128,96] # must match video_encoder
-        latent_dim : 32 # should match static_latent_dim + dynamic_latent_dim
+        latent_dim : 80 # should match static_latent_dim + dynamic_latent_dim
 
     text_encoder_config:
       target: dicomogan.modules.TextEncoder
@@ -57,7 +57,7 @@ model:
     mapping_config:
       target: dicomogan.modules.MappingNetworkVAE
       params:
-        input_dim : 16 # must match dynamic_latent + (static_latent - text_latent)
+        input_dim : 64 # must match dynamic_latent + (static_latent - text_latent)
         fsize : 256
 
     style_mapper_config:
@@ -79,7 +79,7 @@ model:
 data:
   target: main.DataModuleFromConfig
   params:
-    batch_size: 3 # MUST Match batch size in dataset
+    batch_size: 2 # MUST Match batch size in dataset
     num_workers: 10
     train:
       target: dicomogan.data.new_video.VideoDataFashion # Changed from data.video.VideoDataFashion to data.new_video.VideoDataFashion
@@ -89,9 +89,9 @@ data:
         inverted_img_root : /kuacc/users/abond19/datasets/inverted_fashion_dataset
         inversion_root: /kuacc/users/abond19/datasets/w+_fashion_dataset/fashion/PTI/
         skip_frames : 5
-        n_sampled_frames : 7
+        n_sampled_frames : 5
         irregular_sampling : True
-        batch_size : 3 #MUST match batch size 
+        batch_size : 2 #MUST match batch size 
         # crop : [512, 384]
         size : [256, 192]
         # attribute : "Color"
@@ -105,9 +105,9 @@ data:
         inverted_img_root : /kuacc/users/abond19/datasets/inverted_fashion_dataset
         inversion_root: /kuacc/users/abond19/datasets/w+_fashion_dataset/fashion/PTI/
         skip_frames : 5
-        n_sampled_frames : 10
+        n_sampled_frames : 5
         irregular_sampling : False
-        batch_size : 3 #MUST match batch size 
+        batch_size : 2 #MUST match batch size 
         # crop : [512, 384]
         size : [256, 192]
         # attribute : "Color"
