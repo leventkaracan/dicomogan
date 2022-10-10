@@ -442,7 +442,6 @@ class DiCoMOGANCLIP(pl.LightningModule):
                                 nrow=b_frames.shape[0],
                                 normalize=True,
                                 range=range).detach().cpu().numpy()
-                frame = torch.clamp(frame, 0, 1)
                 frame = (np.transpose(frame, (1, 2, 0)) * 255).astype(np.uint8)
                 writer.append_data(frame)
 
