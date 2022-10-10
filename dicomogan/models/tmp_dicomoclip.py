@@ -269,11 +269,11 @@ class DiCoMOGANCLIP(pl.LightningModule):
         txt_feat_mismatch, _ = self.preprocess_text_feat(txt_feat, mx_roll=bs) # T*B x D2
         text_video_style_mismatch, _ = self.preprocess_text_feat(text_video_style, mx_roll=bs) # T*B x D2
         
-        # frame_rep = (latentw, video_style) # T*B x D1+D2
-        # frame_rep_txt_mismatched = (latentw, text_video_style_mismatch) # T*B x D1+D2
+        frame_rep = (latentw, video_style) # T*B x D1+D2
+        frame_rep_txt_mismatched = (latentw, text_video_style_mismatch) # T*B x D1+D2
 
-        frame_rep = (latentw, txt_feat) # T*B x D1+D2
-        frame_rep_txt_mismatched = (latentw, txt_feat_mismatch) # T*B x D1+D2
+        # frame_rep = (latentw, txt_feat) # T*B x D1+D2
+        # frame_rep_txt_mismatched = (latentw, txt_feat_mismatch) # T*B x D1+D2
 
         # predict latents delta
         inversions_tf = self.inversion_mapper(inversions_tf)
@@ -384,9 +384,12 @@ class DiCoMOGANCLIP(pl.LightningModule):
         # vae encode frames
         zs, zd, mu_logvar_s, mu_logvar_d = self.bVAE_enc(vid_rs, ts)
         z_vid = torch.cat((zs, zd), 1) # T*B x D 
+        video_style = zs[:, :self.vae_cond_dim]
+        video_content = zs[:, self.vae_cond_dim:]
 
         muT, logvarT = self.text_enc(txt_feat)
         zT = self.reparametrize(muT, logvarT) # T*B x D 
+        text_video_style = zT
         
         # generate with mathching text
         latentw = self.mapping(z_vid[:,self.vae_cond_dim:])
@@ -398,9 +401,14 @@ class DiCoMOGANCLIP(pl.LightningModule):
 
         # roll batch-wise
         mismatch_txt_feat, _ = self.preprocess_text_feat(txt_feat, mx_roll=2)
+        text_video_style_mismatch, _ = self.preprocess_text_feat(text_video_style, mx_roll=bs) # T*B x D2
+        
+        frame_rep = (latentw, video_style) # T*B x D1+D2
+        frame_rep_txt_mismatched = (latentw, text_video_style_mismatch) # T*B x D1+D2
 
-        frame_rep = (latentw, txt_feat) # T*B x D1+D2
-        frame_rep_txt_mismatched = (latentw, mismatch_txt_feat) # T*B x D1+D2
+        # frame_rep = (latentw, txt_feat) # T*B x D1+D2
+        # frame_rep_txt_mismatched = (latentw, mismatch_txt_feat) # T*B x D1+D2
+
 
         # predict latents delta
         src_inversion = inversions_tf.mean(0, keepdims=True) # 1 x B x 18 x 512
