@@ -17,6 +17,11 @@ from PIL import Image
 import random
 from PIL import Image
 import math
+import wandb
+import imageio
+import torchvision
+import uuid
+
 
 class DiCoMOGANCLIP(pl.LightningModule):
     def __init__(self,
@@ -44,6 +49,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
                     n_critic = 1,
                     ckpt_path=None,
                     ignore_keys=[], 
+                    frame_log_size=(256, 192)
                     ):
         super().__init__()
         self.clip_img_transform = transforms.Compose([
@@ -55,6 +61,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         self.beta = beta
         self.scheduler_config = scheduler_config
         self.n_critic = n_critic
+        self.frame_log_size = frame_log_size
 
         # Loss weights
         self.lambda_vgg = lambda_vgg
@@ -183,7 +190,6 @@ class DiCoMOGANCLIP(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         input_desc = batch['raw_desc'] # B
         sampleT = batch['sampleT']  # B x T 
-        
 
         assert torch.all(sampleT[0] == sampleT[np.random.randint(sampleT.size(0)-1)+1])
         sampleT = sampleT[0] # B  --assumption: all batch['sampleT'] are the same
@@ -218,6 +224,8 @@ class DiCoMOGANCLIP(pl.LightningModule):
 
         # vae encode frames
         zs, zd, mu_logvar_s, mu_logvar_d = self.bVAE_enc(vid_rs_bf, ts)
+        video_style = zs[:, :self.vae_cond_dim]
+        video_content = zs[:, self.vae_cond_dim:]
         z_vid = torch.cat((zs, zd), 1) # T*B x D 
                                
         total_loss = 0
@@ -230,6 +238,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         # vae encode text
         muT, logvarT = self.text_enc(txt_feat)
         zT = self.reparametrize(muT, logvarT) # T*B x D 
+        text_video_style = zT
 
         x_reconT = self.bVAE_dec(torch.cat((zT,z_vid[:, self.vae_cond_dim:]), 1)) # T*B x C x H x W
         x_recon = self.bVAE_dec(z_vid) # T*B x C x H x W
@@ -258,7 +267,11 @@ class DiCoMOGANCLIP(pl.LightningModule):
         
         # roll batch-wise
         txt_feat_mismatch, _ = self.preprocess_text_feat(txt_feat, mx_roll=bs) # T*B x D2
+        text_video_style_mismatch, _ = self.preprocess_text_feat(text_video_style, mx_roll=bs) # T*B x D2
         
+        # frame_rep = (latentw, video_style) # T*B x D1+D2
+        # frame_rep_txt_mismatched = (latentw, text_video_style_mismatch) # T*B x D1+D2
+
         frame_rep = (latentw, txt_feat) # T*B x D1+D2
         frame_rep_txt_mismatched = (latentw, txt_feat_mismatch) # T*B x D1+D2
 
@@ -277,7 +290,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         imgs_txt_mismatched_inp_res = nn.functional.interpolate(imgs_txt_mismatched, size=(256, 192), mode="bicubic", align_corners=False)
 
         reconstruction_loss = self.rec_loss(reconstruction_inp_res, video_sample_norm)
-        latent_loss = self.l2_latent_loss(inversions, w_latents)
+        latent_loss = torch.maximum(self.l2_latent_loss(inversions, w_latents) - self.l2_latent_eps / 2, torch.zeros(1).to(inversions.device)[0]) 
         latent_loss += torch.maximum(self.l2_latent_loss(inversions, w_latents_txt_mismatched) - self.l2_latent_eps, torch.zeros(1).to(inversions.device)[0])
         vgg_loss = self.criterionVGG(reconstruction_inp_res, video_sample_norm)
         
@@ -345,9 +358,11 @@ class DiCoMOGANCLIP(pl.LightningModule):
         inverted_vid = inverted_vid_tf.contiguous().view(n_frames * bs, ch, height, width) # T*B x C x H x W 
         inverted_vid_norm = inverted_vid * 2 - 1 # range [-1, 1] to pass to the generator and disc
 
-        video_sample = vid # B x T x C x H x W 
-        video_sample = video_sample.permute(1,0,2,3,4) # T x B x C x H x W 
-        video_sample = video_sample.contiguous().view(n_frames * bs, ch, height, width) # T*B x C x H x W 
+        # videos reshape
+        vid_bf = batch['real_img'] # B x T x C x H x W 
+        bs, T, ch, height, width = vid_bf.size()
+        vid_tf = vid_bf.permute(1,0,2,3,4) # T x B x C x H x W 
+        video_sample = vid_tf.contiguous().view(n_frames * bs, ch, height, width) # T*B x C x H x W // range [0,1]
         video_sample_norm = video_sample * 2 - 1 # range [-1, 1] to pass to the generator and disc
         
         # inversions reshape
@@ -404,10 +419,40 @@ class DiCoMOGANCLIP(pl.LightningModule):
         ret['x_recon_gan']  = self.stylegan_G(w_latents)
         ret['x_mismatch_text']  = self.stylegan_G(w_latents_txt_mismatched)
 
-        # if split == 'val':
-        #     # TODO: create gif instead of frames
-        #     pass
+        ret['x_recon_gan'] = nn.functional.interpolate(ret['x_recon_gan'], size=self.frame_log_size, mode="bicubic", align_corners=False)
+        ret['x_mismatch_text'] = nn.functional.interpolate(ret['x_recon_gan'], size=self.frame_log_size, mode="bicubic", align_corners=False)
+
+        if split == 'val':
+            C, H, W = ret['real_image'].shape[1:]
+             # TODO: create gif instead of frames 
+            self.log_gif(vid_tf, range=(0, 1), name='val/real_gif')
+            self.log_gif(inverted_vid_tf, range=(0, 1), name='val/inverted_gif')           
+            self.log_gif(ret['x_recon_gan'].reshape(T, bs, C, H , W).contiguous(), range=(-1, 1), name='val/x_recon_gan')
+            self.log_gif(ret['x_mismatch_text'].reshape(T, bs, C, H , W).contiguous(), range=(-1, 1), name='val/x_mismatch_text')
         return ret
+
+    
+    def log_gif(self, video, range, name):
+        # Assuming that the current shape is T * B x C x H x W
+        filename = f'tmp/{str(uuid.uuid4())}.gif'
+        with imageio.get_writer(filename, mode='I') as writer:
+           for b_frames in video:
+                # b_frames B x C x H x W
+                frame = torchvision.utils.make_grid(b_frames,
+                                nrow=b_frames.shape[0],
+                                normalize=True,
+                                range=range).detach().cpu().numpy()
+                frame = torch.clamp(frame, 0, 1)
+                frame = (np.transpose(frame, (1, 2, 0)) * 255).astype(np.uint8)
+                writer.append_data(frame)
+
+        # for i in range(shape[0]):
+        #     current_video = video_correct[i]
+        #     imgs = [Image.fromarray(img) for img in current_video]
+        #     imgs[0].save("./tmp/", save_all=True, append_images=imgs[1:], duration=50, loop=0)
+        wandb.log({name: wandb.Video(filename, fps=2, format="gif")})
+        os.remove(filename)
+
 
 
 

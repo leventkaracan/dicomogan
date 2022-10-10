@@ -370,7 +370,7 @@ class ImageLogger(Callback):
         self.clamp = clamp
 
     @rank_zero_only
-    def _wandb(self, pl_module, images, batch_idx, split, global_step, ncol=3):
+    def _wandb(self, pl_module, images, batch_idx, split, global_step, ncol=6):
         """
         Log images with the help of wandb by combining every split images into one frame
         Params:
@@ -386,7 +386,7 @@ class ImageLogger(Callback):
             elif isinstance(images[k], torch.Tensor):
                 sz = images[k].shape[0]
                 grid = torchvision.utils.make_grid(images[k],
-                                nrow=sz//ncol,
+                                nrow=ncol,
                                 normalize=True,
                                 range=(-1, 1))
             else:
@@ -418,7 +418,7 @@ class ImageLogger(Callback):
 
     @rank_zero_only
     def log_local(self, save_dir, split, images,
-                  global_step, current_epoch, batch_idx, ncol=3):
+                  global_step, current_epoch, batch_idx, ncol=6):
         
         """
         pos-process images then save them locally by combining every split images into one frame then saving them locally
@@ -430,7 +430,7 @@ class ImageLogger(Callback):
                 continue
             elif isinstance(images[k], torch.Tensor):
                 sz = images[k].shape[0]
-                grid = torchvision.utils.make_grid(images[k], nrow=sz//ncol)
+                grid = torchvision.utils.make_grid(images[k], nrow=ncol)
                 grid = (grid+1.0)/2.0 # -1,1 -> 0,1; c,h,w
                 grid = grid.transpose(0,1).transpose(1,2).squeeze(-1)
                 grid = grid.numpy()
@@ -723,7 +723,7 @@ if __name__ == "__main__":
                 "target": "main.ImageLogger",
                 "params": {
                     "batch_frequency": 250, # 750
-                    "max_images": 1000, # 5 * 3 frames
+                    "max_images": 15, # 5 * 3 frames
                     "clamp": True
                 }
             },
