@@ -226,6 +226,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         zs, zd, mu_logvar_s, mu_logvar_d = self.bVAE_enc(vid_rs_bf, ts)
         video_style = zs[:, :self.vae_cond_dim]
         video_content = zs[:, self.vae_cond_dim:]
+        video_dynamics = zd
         z_vid = torch.cat((zs, zd), 1) # T*B x D 
                                
         total_loss = 0
@@ -258,7 +259,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
 
 
         # Generator loss
-        latentw = self.mapping(z_vid[:,self.vae_cond_dim:]) # T*B x D
+        # latentw = self.mapping(z_vid[:,self.vae_cond_dim:]) # T*B x D
 
         # roll video-wise
         # reshaped_latentw = latentw.view(T, bs, -1).permute(1, 0, 2).contiguous()
@@ -271,9 +272,10 @@ class DiCoMOGANCLIP(pl.LightningModule):
         
         # frame_rep = (latentw, video_style) # T*B x D1+D2
         # frame_rep_txt_mismatched = (latentw, text_video_style_mismatch) # T*B x D1+D2
-
-        frame_rep = (latentw, txt_feat) # T*B x D1+D2
-        frame_rep_txt_mismatched = (latentw, txt_feat_mismatch) # T*B x D1+D2
+        
+        # frame rep (video_style, video_content, dynamics)
+        frame_rep = (txt_feat, video_content, video_dynamics) # T*B x D1+D2
+        frame_rep_txt_mismatched = (txt_feat_mismatch, video_content, video_dynamics) # T*B x D1+D2
 
         # predict latents delta
         inversions_tf = self.inversion_mapper(inversions_tf)
@@ -383,13 +385,16 @@ class DiCoMOGANCLIP(pl.LightningModule):
 
         # vae encode frames
         zs, zd, mu_logvar_s, mu_logvar_d = self.bVAE_enc(vid_rs, ts)
+        video_style = zs[:, :self.vae_cond_dim]
+        video_content = zs[:, self.vae_cond_dim:]
+        video_dynamics = zd
         z_vid = torch.cat((zs, zd), 1) # T*B x D 
 
         muT, logvarT = self.text_enc(txt_feat)
         zT = self.reparametrize(muT, logvarT) # T*B x D 
         
         # generate with mathching text
-        latentw = self.mapping(z_vid[:,self.vae_cond_dim:])
+        # latentw = self.mapping(z_vid[:,self.vae_cond_dim:])
         
         # roll video-wise
         # reshaped_latentw = latentw.view(T, bs, -1).permute(1, 0, 2).contiguous()
@@ -399,8 +404,13 @@ class DiCoMOGANCLIP(pl.LightningModule):
         # roll batch-wise
         mismatch_txt_feat, _ = self.preprocess_text_feat(txt_feat, mx_roll=2)
 
-        frame_rep = (latentw, txt_feat) # T*B x D1+D2
-        frame_rep_txt_mismatched = (latentw, mismatch_txt_feat) # T*B x D1+D2
+        # frame rep (video_style, video_content, dynamics)
+        frame_rep = (txt_feat, video_content, video_dynamics) # T*B x D1+D2
+        frame_rep_txt_mismatched = (mismatch_txt_feat, video_content, video_dynamics) # T*B x D1+D2
+
+        # frame_rep = (latentw, txt_feat) # T*B x D1+D2
+        # frame_rep_txt_mismatched = (latentw, mismatch_txt_feat) # T*B x D1+D2
+        
 
         # predict latents delta
         src_inversion = inversions_tf.mean(0, keepdims=True) # 1 x B x 18 x 512
