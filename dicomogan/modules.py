@@ -311,8 +311,6 @@ class EncoderVideo(nn.Module):
 
 
 class EncoderVideo_LatentODE(nn.Module):
-
-
     def __init__(self, img_size, odefunc,
                  static_latent_dim=5, dynamic_latent_dim=1, hid_channels = 32, kernel_size = 4, hidden_dim = 256):
 
@@ -641,8 +639,8 @@ class LatentODEfunc(nn.Module):
         self.elu = nn.ELU(inplace=True)
         self.fc1 = nn.Linear(latent_dim, nhidden)
         self.fc2 = nn.Linear(nhidden, nhidden)
-        #self.fc21 = nn.Linear(nhidden, nhidden)
-        #self.fc22 = nn.Linear(nhidden, nhidden)
+        self.fc21 = nn.Linear(nhidden, nhidden)
+        # self.fc22 = nn.Linear(nhidden, nhidden)
         self.fc3 = nn.Linear(nhidden, latent_dim)
         self.nfe = 0
         #self.apply(weights_init)
@@ -655,10 +653,10 @@ class LatentODEfunc(nn.Module):
         out = self.elu(out)
         out = self.fc2(out)
         out = self.elu(out)
-        #out = self.fc21(out)
-        #out = self.elu(out)
-        #out = self.fc22(out)
-        #out = self.elu(out)
+        out = self.fc21(out)
+        out = self.elu(out)
+        # out = self.fc22(out)
+        # out = self.elu(out)
         out = self.fc3(out)
         return out
 
