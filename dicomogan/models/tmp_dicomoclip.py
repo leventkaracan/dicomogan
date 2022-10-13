@@ -263,8 +263,10 @@ class DiCoMOGANCLIP(pl.LightningModule):
         frame_rep_txt_mismatched = (latentw, txt_feat_mismatch) # T*B x D1+D2
 
         # predict latents delta
-        inversions_tf = self.inversion_mapper(inversions_tf)
-        src_inversion = inversions_tf.mean(0, keepdims=True) # 1 x B x 18 x 512
+        #inversions_tf = self.inversion_mapper(inversions_tf)
+        #src_inversion = inversions_tf.mean(0, keepdims=True) # 1 x B x 18 x 512
+        inversions_tf = inversions_tf.mean(0, keepdims=True)
+        src_inversion = self.inversion_mapper(inversions_tf)
         src_inversion_tf = src_inversion.repeat(T, 1, 1, 1)
         src_inversion = src_inversion_tf.reshape(T*bs, n_channels, dim)
         w_latents = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, *frame_rep)
@@ -388,7 +390,9 @@ class DiCoMOGANCLIP(pl.LightningModule):
         frame_rep_txt_mismatched = (latentw, mismatch_txt_feat) # T*B x D1+D2
 
         # predict latents delta
-        src_inversion = inversions_tf.mean(0, keepdims=True) # 1 x B x 18 x 512
+        #src_inversion = inversions_tf.mean(0, keepdims=True) # 1 x B x 18 x 512
+        inversions_tf = inversions_tf.mean(0, keepdims=True)
+        src_inversion = self.inversion_mapper(inversions_tf)
         src_inversion_tf = src_inversion.repeat(T, 1, 1, 1)
         src_inversion = src_inversion_tf.reshape(T*bs, n_channels, dim)
         w_latents = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, *frame_rep)
