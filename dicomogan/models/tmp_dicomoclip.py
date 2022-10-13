@@ -87,13 +87,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         self.style_mapper = instantiate_from_config(style_mapper_config)
         self.stylegan_G = instantiate_from_config(stylegan_gen_config)
         self.requires_grad(self.stylegan_G, False)
-        self.stylegan_G.eval() # TODO: rm the eval 
-
-        #self.inversion_mapper = nn.Sequential(nn.Linear(512, 512), nn.ReLU(), nn.Linear(512, 512))
-        # Initialize the 1 layer projection to be the identity by using identity matrix and bias = 0
-        self.inversion_mapper = nn.Sequential(nn.Linear(512, 512))
-        nn.init.eye_(self.inversion_mapper[0].weight)
-        nn.init.zeros_(self.inversion_mapper[0].bias)
+        self.stylegan_G.eval() # TODO: rm the eval maybe
 
         # loss
         self.criterionVGG = VGGLoss()
@@ -245,7 +239,6 @@ class DiCoMOGANCLIP(pl.LightningModule):
         frame_rep_txt_mismatched = (txt_feat_mismatch, video_content, video_dynamics) # T*B x D1+D2
 
         # predict latents delta
-        inversions_tf = self.inversion_mapper(inversions_tf)
         src_inversion = inversions_tf.mean(0, keepdims=True) # 1 x B x 18 x 512
         src_inversion_tf = src_inversion.repeat(T, 1, 1, 1)
         src_inversion = src_inversion_tf.reshape(T*bs, n_channels, dim)
@@ -346,7 +339,6 @@ class DiCoMOGANCLIP(pl.LightningModule):
         frame_rep_txt_mismatched = (txt_feat_mismatch, video_content, video_dynamics) # T*B x D1+D2
 
         # predict latents delta
-        inversions_tf = self.inversion_mapper(inversions_tf)
         src_inversion = inversions_tf.mean(0, keepdims=True) # 1 x B x 18 x 512
         src_inversion_tf = src_inversion.repeat(T, 1, 1, 1)
         src_inversion = src_inversion_tf.reshape(T*bs, n_channels, dim)
@@ -541,8 +533,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
 
         m_params = list(self.mapping.parameters())
 
-        style_m_params = list(self.style_mapper.parameters())+\
-                            list(self.inversion_mapper.parameters())
+        style_m_params = list(self.style_mapper.parameters())
         
         opt_vae = torch.optim.Adam(vae_params,
                                   lr=lr * 5, 
