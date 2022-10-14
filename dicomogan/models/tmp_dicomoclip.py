@@ -541,11 +541,12 @@ class DiCoMOGANCLIP(pl.LightningModule):
 
         opt_sm = torch.optim.Adam(style_m_params, lr=lr, betas=(0.9, 0.99))
 
-        opt_m = torch.optim.Adam(m_params,
-                                  lr=lr / 100, 
-                                  betas=(0.5, 0.999))
+        #opt_m = torch.optim.Adam(m_params,
+        #                          lr=lr / 100, 
+        #                          betas=(0.5, 0.999))
 
-        opt_ae = HybridOptim([opt_vae, opt_m, opt_sm])
+        #opt_ae = HybridOptim([opt_vae, opt_m, opt_sm])
+        opt_ae = HybridOptim([opt_vae, opt_sm])
         
         
         ae_ret = {"optimizer": opt_ae, "frequency": 1}
