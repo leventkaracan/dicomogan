@@ -33,7 +33,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
                     text_encoder_config,
                     style_mapper_config,
                     stylegan_gen_config,
-                    mapping_config,
+                    #mapping_config,
                     lambda_vgg,
                     lambda_G,
                     lambda_bvae,
@@ -83,7 +83,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         self.bVAE_enc = instantiate_from_config(video_ecnoder_config, odefunc=self.func) 
         self.bVAE_dec = instantiate_from_config(video_decoder_config)
         self.text_enc = instantiate_from_config(text_encoder_config)
-        self.mapping = instantiate_from_config(mapping_config) 
+        #self.mapping = instantiate_from_config(mapping_config) 
         self.style_mapper = instantiate_from_config(style_mapper_config)
         self.stylegan_G = instantiate_from_config(stylegan_gen_config)
         self.requires_grad(self.stylegan_G, False)
@@ -531,7 +531,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
                  list(self.bVAE_dec.parameters())+\
                  list(self.text_enc.parameters())
 
-        m_params = list(self.mapping.parameters())
+        #m_params = list(self.mapping.parameters())
 
         style_m_params = list(self.style_mapper.parameters())
         

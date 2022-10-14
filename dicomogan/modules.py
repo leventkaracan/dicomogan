@@ -659,6 +659,9 @@ class LatentODEfunc(nn.Module):
         # out = self.elu(out)
         out = self.fc3(out)
         return out
+    
+    def callback_step(self, t0, y0, dt):
+        pass
 
 
 # This stands for the only text conditioned model.

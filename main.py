@@ -12,6 +12,9 @@ from omegaconf import OmegaConf # Yaml hierarcichal config
 import numpy as np
 from PIL import Image
 
+from pytorch_lightning.profiler import AdvancedProfiler, SimpleProfiler
+from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
+
 import torchvision
 from torch.utils.data import random_split, DataLoader, Dataset
 import pytorch_lightning as pl
@@ -648,36 +651,37 @@ if __name__ == "__main__":
         # trainer and callbacks
         trainer_kwargs = dict()
 
-        # default logger configs
-        # NOTE wandb < 0.10.0 interferes with shutdown
-        # wandb >= 0.10.0 seems to fix it but still interferes with pudb
-        # debugging (wrongly sized pudb ui)
-        # thus prefer testtube for now
+        #default logger configs
+        #NOTE wandb < 0.10.0 interferes with shutdown
+        #wandb >= 0.10.0 seems to fix it but still interferes with pudb
+        #debugging (wrongly sized pudb ui)
+        #thus prefer testtube for now
         default_logger_cfgs = {
-            "wandb": {
-                "target": "pytorch_lightning.loggers.WandbLogger",
-                "params": {
-                    "project":config.project_title,
-                    "name": nowname,
-                    "save_dir": logdir,
-                    "offline": opt.debug,
-                    "id": nowname,
-                }
-            },
+           "wandb": {
+               "target": "pytorch_lightning.loggers.WandbLogger",
+               "params": {
+                   "project":config.project_title,
+                   "name": nowname,
+                   "save_dir": logdir,
+                   "offline": opt.debug,
+                   "id": nowname,
+               }
+           },
             "testtube": {
-                "target": "pytorch_lightning.loggers.TestTubeLogger",
-                "params": {
-                    "name": "testtube",
-                    "save_dir": logdir,
-                    "create_git_tag" : True,
-                }
-                
+               "target": "pytorch_lightning.loggers.TestTubeLogger",
+               "params": {
+                   "name": "testtube",
+                   "save_dir": logdir,
+                   "create_git_tag" : True,
+               }
+               
             },
         }
         default_logger_cfg = default_logger_cfgs["wandb"]
         logger_cfg = lightning_config.logger or OmegaConf.create()
         logger_cfg = OmegaConf.merge(default_logger_cfg, logger_cfg)
         trainer_kwargs["logger"] = instantiate_from_config(logger_cfg)
+        
 
         # modelcheckpoint - use TrainResult/EvalResult(checkpoint_on=metric) to
         # specify which metric is used to determine best models
@@ -751,7 +755,9 @@ if __name__ == "__main__":
 
         print(trainer_opt)
         print(trainer_kwargs)
-        trainer = Trainer.from_argparse_args(trainer_opt, **trainer_kwargs, strategy=DDPPlugin(find_unused_parameters=True))
+        profiler = AdvancedProfiler(dirpath="./profiler_logs/", filename="correct_advanced_profiler_log")
+        trainer = Trainer.from_argparse_args(trainer_opt, **trainer_kwargs, strategy=DDPPlugin(find_unused_parameters=False), 
+                                             profiler=profiler)
 
         # data
         data = instantiate_from_config(config.data)

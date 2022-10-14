@@ -434,7 +434,7 @@ class AttributeMapperSubModule(nn.Module):
             
     
     def forward(self, x, attribute_vectors):
-        attribute_vectors = attribute_vectors[self.use_mapper]
+        attribute_vectors = [att for flag, att in zip(self.use_mapper, attribute_vectors) if flag]
         for i in range(len(attribute_vectors)):
             if attribute_vectors[i].shape[1] != 1:
                 attribute_vectors[i] = attribute_vectors[i].unsqueeze(1).repeat(1, x.shape[1], 1)
@@ -482,9 +482,9 @@ class TripleAttributeMapper(nn.Module):
         x_fine = x[:, 8:, :]
         
         
-        x_coarse = self.coarse_mapping(x_coarse, np.array([attribute_vector1, attribute_vector2, attribute_vector3]))
-        x_medium = self.medium_mapping(x_medium, np.array([attribute_vector1, attribute_vector2, attribute_vector3]))
-        x_fine = self.fine_mapping(x_fine, np.array([attribute_vector1, attribute_vector2, attribute_vector3]))
+        x_coarse = self.coarse_mapping(x_coarse, [attribute_vector1, attribute_vector2, attribute_vector3])
+        x_medium = self.medium_mapping(x_medium, [attribute_vector1, attribute_vector2, attribute_vector3])
+        x_fine = self.fine_mapping(x_fine, [attribute_vector1, attribute_vector2, attribute_vector3])
             
         output = torch.cat([x_coarse, x_medium, x_fine], dim=1)
         return output
