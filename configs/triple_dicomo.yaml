@@ -99,9 +99,9 @@ data:
       target: dicomogan.data.new_video.VideoDataFashion # Changed from data.video.VideoDataFashion to data.new_video.VideoDataFashion
       params:
         video_list: data/fashion/fashion_test_videos.txt
-        img_root: /kuacc/users/abond19/datasets/aligned_fashion_dataset
-        inverted_img_root : /kuacc/users/abond19/datasets/inverted_fashion_dataset
-        inversion_root: /kuacc/users/abond19/datasets/w+_fashion_dataset/fashion/PTI/
+        img_root: /scratch/users/abond19/datasets/aligned_fashion_dataset
+        inverted_img_root : /scratch/users/abond19/datasets/inverted_fashion_dataset
+        inversion_root: /scratch/users/abond19/datasets/w+_fashion_dataset/fashion/PTI/
         skip_frames : 5
         n_sampled_frames : 6
         irregular_sampling : False
@@ -116,5 +116,5 @@ lightning:
   trainer:
     limit_val_batches : 2
     replace_sampler_ddp : False
-    max_epochs: 1
+    # precision : 32
 

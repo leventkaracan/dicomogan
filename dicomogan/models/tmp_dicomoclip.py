@@ -192,7 +192,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         
         bs, T, ch, height, width = vid.size()
         n_frames = T
-        ts = (sampleT)*0.01
+        ts = (sampleT) / 50
         ts = ts - ts[0] 
 
 
@@ -255,7 +255,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         assert torch.all(sampleT[0] == sampleT[np.random.randint(sampleT.size(0)-1)+1])
         sampleT = sampleT[0] # B  --assumption: all batch['sampleT'] are the same
         n_frames = sampleT.shape[0]
-        ts = (sampleT) * 0.01
+        ts = (sampleT) / 50
         ts = ts - ts[0]
 
         # videos reshape
@@ -413,7 +413,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         sampleT = sampleT[0] # B  --assumption: all batch['sampleT'] are the same
         n_frames = sampleT.shape[0]
         bs, T, ch, height, width = vid.size()
-        ts = (sampleT)*0.01
+        ts = (sampleT) / 50
         ts = ts - ts[0] 
         
         inverted_vid_tf = inverted_vid_bf.permute(1,0,2,3,4) # T x B x C x H x W 

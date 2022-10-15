@@ -9,6 +9,7 @@ from torch.nn.modules.rnn import LSTM, GRU
 from lib.utils import get_device
 from torch.distributions.multivariate_normal import MultivariateNormal
 from torchdiffeq import odeint as odeint
+# from torchdiffeq import odeint_adjoint as odeint
 import torchvision.models as models
 from torch.nn import functional as F
 from typing import Tuple, Optional, List
@@ -435,8 +436,11 @@ class EncoderVideo_LatentODE(nn.Module):
         mu_d0, logvar_d0 = mu_logvar_d0.view(-1, self.dynamic_latent_dim, 2).unbind(-1)
 
         zd0 = self.reparametrize(mu_d0, logvar_d0) # B x D' (Where D' = 1 in our code :/)
+        zd0 = zd0.to(torch.float64)
 
         zdt = odeint(self.odefunc,zd0,t,method='dopri5') # aren't we here solving the ODE jointly for all videos? Shouldn't we separate them?
+        
+        zdt = zdt.to(torch.float32)
         #print(zdt.size())
         zdt = zdt.view(batch_size * T, -1) # T*B x D 
 
@@ -637,11 +641,11 @@ class LatentODEfunc(nn.Module):
     def __init__(self, latent_dim=1, nhidden=10):
         super(LatentODEfunc, self).__init__()
         self.elu = nn.ELU(inplace=True)
-        self.fc1 = nn.Linear(latent_dim, nhidden)
-        self.fc2 = nn.Linear(nhidden, nhidden)
-        self.fc21 = nn.Linear(nhidden, nhidden)
+        self.fc1 = nn.Linear(latent_dim, nhidden, dtype=torch.float64)
+        self.fc2 = nn.Linear(nhidden, nhidden, dtype=torch.float64)
+        self.fc21 = nn.Linear(nhidden, nhidden, dtype=torch.float64)
         # self.fc22 = nn.Linear(nhidden, nhidden)
-        self.fc3 = nn.Linear(nhidden, latent_dim)
+        self.fc3 = nn.Linear(nhidden, latent_dim, dtype=torch.float64)
         self.nfe = 0
         #self.apply(weights_init)
         self.latent_dim = latent_dim

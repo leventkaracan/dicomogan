@@ -110,7 +110,7 @@ def get_parser(**parser_kwargs):
         "-s",
         "--seed",
         type=int,
-        default=130,
+        default=107,
         help="seed for seed_everything",
     )
     parser.add_argument(
@@ -755,9 +755,11 @@ if __name__ == "__main__":
 
         print(trainer_opt)
         print(trainer_kwargs)
-        profiler = AdvancedProfiler(dirpath="./profiler_logs/", filename="correct_advanced_profiler_log")
-        trainer = Trainer.from_argparse_args(trainer_opt, **trainer_kwargs, strategy=DDPPlugin(find_unused_parameters=False), 
-                                             profiler=profiler)
+        # profiler = AdvancedProfiler(dirpath="./profiler_logs/", filename="short_advanced_profiler_log")
+        # trainer = Trainer.from_argparse_args(trainer_opt, **trainer_kwargs, strategy=DDPPlugin(find_unused_parameters=False), 
+        #                                      profiler=profiler)
+        
+        trainer = Trainer.from_argparse_args(trainer_opt, **trainer_kwargs, strategy=DDPPlugin(find_unused_parameters=False))
 
         # data
         data = instantiate_from_config(config.data)
