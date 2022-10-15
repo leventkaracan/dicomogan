@@ -212,7 +212,7 @@ class CLIPLoss(pl.LightningModule):
 
         clip_loss = 0
         for i in range(1, num_samples):
-            clip_loss += (1 - F.cosine_similarity(embeds, torch.roll(embeds, i, 1), dim=-1))
+            clip_loss += (1 - F.cosine_similarity(embeds, torch.roll(embeds, i, dims=1), dim=-1))
         return clip_loss.mean().mean()
     
     

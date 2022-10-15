@@ -154,7 +154,8 @@ class VideoDataFashion(data.Dataset):
 
             # Getting the inversion
             if self.inversion_root is not None:
-                assert self.data_paths[index][i][len(self.img_root):].split('.')[0] == self.data_paths[index][i][len(self.img_root):].split('.')[0], "inverstion does not matched image"
+                assert self.inversion_paths[index][i][len(self.inversion_root):].split('.')[0] == self.data_paths[index][i][len(self.img_root):].split('.')[0],\
+                     f"inverstion path does not matched image {self.inversion_paths[index][i][len(self.inversion_root):].split('.')[0]} : {self.data_paths[index][i][len(self.img_root):].split('.')[0]}"
                 w_path = self.inversion_paths[index][i]
                 w_vec = self.get_inversion(w_path)
                 W = w_vec if W is None else torch.cat([W, w_vec], dim=0)
@@ -171,7 +172,7 @@ class VideoDataFashion(data.Dataset):
     def reset(self, ):
         self.base_seed = np.random.randint(100000)
 
-        # permute indecies
+        # permute indecies to shuffle training dataset
         self.video_list = np.random.permutation(self.video_list)
         self.data_paths, self.inverted_img_paths, self.inversion_paths, self.desc_paths, self.frame_numbers, self.attributes = self._load_dataset()
 

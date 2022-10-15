@@ -240,7 +240,7 @@ class EncoderVideo(nn.Module):
             if isReverse:
                 # we are going backwards in time with
                 delta_t = utils.reverse(delta_t)
-            delta_t = torch.cat((delta_t, torch.zeros(1).cuda()))
+            delta_t = torch.cat((delta_t, torch.zeros(1).to(delta_t.device)))
             delta_t = delta_t.unsqueeze(1).repeat((1,batch_size)).unsqueeze(-1)
             h = torch.cat((delta_t, h),-1)
 
@@ -295,7 +295,7 @@ class EncoderVideo(nn.Module):
             if isReverse:
                 # we are going backwards in time with
                 delta_t = utils.reverse(delta_t)
-            delta_t = torch.cat((delta_t, torch.zeros(1).cuda()))
+            delta_t = torch.cat((delta_t, torch.zeros(1).to(delta_t.device)))
             delta_t = delta_t.unsqueeze(1).repeat((1,batch_size)).unsqueeze(-1)
             h = torch.cat((delta_t, h),-1)
 
@@ -424,7 +424,7 @@ class EncoderVideo_LatentODE(nn.Module):
             if isReverse:
                 # we are going backwards in time with
                 delta_t = utils.reverse(delta_t)
-            delta_t = torch.cat((delta_t, torch.zeros(1).cuda()))
+            delta_t = torch.cat((delta_t, torch.zeros(1).to(delta_t.device)))
             delta_t = delta_t.unsqueeze(1).repeat((1,batch_size)).unsqueeze(-1) # concat time. Why not pos encoding?  # T x B x (D+1)
             h = torch.cat((delta_t, h),-1)
 
@@ -493,7 +493,7 @@ class EncoderVideo_LatentODE(nn.Module):
             if isReverse:
                 # we are going backwards in time with
                 delta_t = utils.reverse(delta_t)
-            delta_t = torch.cat((delta_t, torch.zeros(1).cuda()))
+            delta_t = torch.cat((delta_t, torch.zeros(1).to(delta_t.device)))
             delta_t = delta_t.unsqueeze(1).repeat((1,batch_size)).unsqueeze(-1)
             h = torch.cat((delta_t, h),-1)
 
@@ -554,7 +554,7 @@ class EncoderVideo_LatentODE(nn.Module):
             if isReverse:
                 # we are going backwards in time with
                 delta_t = utils.reverse(delta_t)
-            delta_t = torch.cat((delta_t, torch.zeros(1).cuda()))
+            delta_t = torch.cat((delta_t, torch.zeros(1).to(delta_t.device)))
             delta_t = delta_t.unsqueeze(1).repeat((1,batch_size)).unsqueeze(-1)
             h = torch.cat((delta_t, h),-1)
 
@@ -703,7 +703,7 @@ class MFMOD(nn.Module):
         #print(beta_alpha)
         factor = gamma_alpha * factor1 + (1 - gamma_alpha) * factor2
         bias = beta_alpha * bias1 + (1 - beta_alpha) * bias2
-        added_noise = (torch.randn(img_feat.shape[0], img_feat.shape[3], img_feat.shape[2], 1).cuda() * self.noise_var).transpose(1, 3)
+        added_noise = (torch.randn(img_feat.shape[0], img_feat.shape[3], img_feat.shape[2], 1).to(img_feat.device) * self.noise_var).transpose(1, 3)
         result = self.norm(img_feat + added_noise)
         result = result * factor + bias  
         return result

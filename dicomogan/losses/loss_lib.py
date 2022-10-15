@@ -4,7 +4,9 @@ import torch.nn as nn
 from torch.autograd import Variable
 from dicomogan.modules import Vgg19
 from torchvision.utils import save_image
+import torchvision.transforms as transforms
 from torch.nn import functional as F
+
 
 def cosine_similarity(A, B):
     with torch.no_grad():
@@ -76,11 +78,14 @@ class GANLoss(nn.Module):
 class VGGLoss(nn.Module):
     def __init__(self):
         super(VGGLoss, self).__init__()
-        self.vgg = Vgg19()
+        self.vgg = Vgg19().eval()
         self.criterion = nn.L1Loss()
         self.weights = [1.0 / 32, 1.0 / 16, 1.0 / 8, 1.0 / 4, 1.0]
+        self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                     std=[0.229, 0.224, 0.225])
 
     def forward(self, x, y):
+        x, y = self.normalize(x), self.normalize(y)
         x_vgg, y_vgg = self.vgg(x), self.vgg(y)
         loss = 0
         for i in range(len(x_vgg)):
