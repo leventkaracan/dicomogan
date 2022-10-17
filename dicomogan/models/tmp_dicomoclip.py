@@ -177,72 +177,6 @@ class DiCoMOGANCLIP(pl.LightningModule):
             self.trainer.train_dataloader.dataset.datasets.reset()
 
     
-    # def forward(self, videos, inversions, sampleT, input_desc):
-    #     """
-    #     return a dictionary of tensors in the range [-1, 1]
-    #     """
-    #     vid = videos # B x T x ch x H x W -- range [0, 1]
-    #     input_desc = input_desc 
-    #     sampleT = sampleT 
-        
-    #     bs, T, ch, height, width = vid.size()
-    #     n_frames = T
-    #     ts = (sampleT) / self.video_length
-    #     ts = ts - ts[0] 
-
-
-    #     video_sample = vid # B x T x C x H x W 
-    #     video_sample = video_sample.permute(1,0,2,3,4) # T x B x C x H x W 
-    #     video_sample = video_sample.contiguous().view(n_frames * bs, ch, height, width) # T*B x C x H x W 
-    #     video_sample_norm = video_sample * 2 - 1 # range [-1, 1] to pass to the generator and disc
-
-    #     # inversions reshape
-    #     inversions_bf = inversions # B, T x n_layers x D
-    #     bs, T, n_channels, dim = inversions_bf.shape
-    #     inversions_tf = inversions_bf.permute(1, 0, 2, 3)
-    #     inversions = inversions_tf.contiguous().reshape(T * bs, n_channels, dim) # T * B x n_layers x D
-
-    #     # downsample res for vae
-    #     vid_rs_full = nn.functional.interpolate(video_sample, scale_factor=0.5, mode="bicubic", align_corners=False, recompute_scale_factor=True)
-    #     vid_rs = vid_rs_full.view(n_frames, bs, ch, int(height*0.5),int(width*0.5) )
-    #     vid_rs = vid_rs.permute(1,0,2,3,4) #  B x T x C x H//2 x W//2
-
-    #     # encode text
-    #     txt_feat = self.clip_encode_text(input_desc)  # B x D
-    #     txt_feat = txt_feat.unsqueeze(0).repeat(n_frames,1,1)
-    #     txt_feat = txt_feat.view(bs * n_frames, -1)  # T*B x D
-
-    #     # vae encode frames
-    #     zs, zd, mu_logvar_s, mu_logvar_d = self.bVAE_enc(vid_rs, ts)
-    #     z_vid = torch.cat((zs, zd), 1) # T*B x D 
-    #     video_style = zs[:, :self.vae_cond_dim]
-    #     video_content = zs[:, self.vae_cond_dim:]
-    #     video_dynamics = zd
-
-    #     muT, logvarT = self.text_enc(txt_feat)
-    #     zT = self.reparametrize(muT, logvarT) # T*B x D 
-        
-
-    #     # roll batch-wise
-    #     txt_feat_mismatch, _ = self.preprocess_text_feat(txt_feat, mx_roll=bs) # T*B x D2
-        
-    #     # frame_rep = (latentw, video_style) # T*B x D1+D2
-    #     # frame_rep_txt_mismatched = (latentw, text_video_style_mismatch) # T*B x D1+D2
-        
-    #     # frame rep (video_style, video_content, dynamics)
-    #     frame_rep = (txt_feat, video_content, video_dynamics) # T*B x D1+D2
-    #     frame_rep_txt_mismatched = (txt_feat_mismatch, video_content, video_dynamics) # T*B x D1+D2
-
-    #     # predict latents delta
-    #     src_inversion = inversions_tf.mean(0, keepdims=True) # 1 x B x 18 x 512
-    #     src_inversion_tf = src_inversion.repeat(T, 1, 1, 1)
-    #     src_inversion = src_inversion_tf.reshape(T*bs, n_channels, dim)
-    #     w_latents = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, *frame_rep)
-
-    #     ret = self.stylegan_G(w_latents) / 2 + 0.5 
-    #     ret = ret.reshape(T, bs, ret.shape[1], ret.shape[2], ret.shape[3]).permute(1, 0, 2, 3, 4)
-    #     return ret
-    
     def training_step(self, batch, batch_idx):
         input_desc = batch['raw_desc'] # B
 
@@ -263,8 +197,8 @@ class DiCoMOGANCLIP(pl.LightningModule):
         inversions_bf = batch['inversion'] # B, T x n_layers x D
         bs, T, n_channels, dim = inversions_bf.shape
         inversions_tf = inversions_bf.permute(1, 0, 2, 3)
-        inversions = inversions_tf.contiguous().reshape(T * bs, n_channels, dim) # T * B x n_layers x D
-        inversions.requires_grad = False
+        # inversions = inversions_tf.contiguous().reshape(T * bs, n_channels, dim) # T * B x n_layers x D
+        # inversions.requires_grad = False
 
         # downsample res for vae TODO: experiment with downsampling the resolution much more
         vid_rs = nn.functional.interpolate(video_sample, scale_factor=0.5, mode="bicubic", align_corners=False, recompute_scale_factor=True) # T*B x C x H//2 x W//2 
@@ -421,8 +355,8 @@ class DiCoMOGANCLIP(pl.LightningModule):
         inversions_bf = batch['inversion'] # B, T x n_layers x D
         bs, T, n_channels, dim = inversions_bf.shape
         inversions_tf = inversions_bf.permute(1, 0, 2, 3)
-        inversions = inversions_tf.contiguous().reshape(T * bs, n_channels, dim) # T * B x n_layers x D
-        inversions.requires_grad = False
+        # inversions = inversions_tf.contiguous().reshape(T * bs, n_channels, dim) # T * B x n_layers x D
+        # inversions.requires_grad = False
 
         inverted_vid_bf = batch['inverted_img'] # B x T x ch x H x W -- range [0, 1]
         inverted_vid_tf = inverted_vid_bf.permute(1,0,2,3,4) # T x B x C x H x W 

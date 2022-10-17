@@ -411,8 +411,8 @@ class EncoderVideo_LatentODE(nn.Module):
         #     h.append(hi)
         # h = torch.stack(h) # T x B x D
 
-        h_max = torch.max(h, dim=0)[0].unsqueeze(0) # B x D
-        hs = h_max.repeat(T,1,1) # T x B x D
+        h_max = torch.max(h, dim=0)[0] # B x D
+        # hs = h_max.repeat(T,1,1) # T x B x D
 
         isReverse = True
         if isReverse:
@@ -445,10 +445,10 @@ class EncoderVideo_LatentODE(nn.Module):
         zdt = zdt.view(batch_size * T, -1) # T*B x D 
 
         # Question: why using hs and not h_max? Isn't redundent? TODO: optimize later
-        mu_logvars = self.mu_logvar_gen_s(hs.contiguous().view(batch_size * T, -1))
-        mus, logvars = mu_logvars.view(-1, self.static_latent_dim, 2).unbind(-1) # T*B x D 
-
-        zs = self.reparametrize(mus, logvars) # T*B x D 
+        mu_logvars = self.mu_logvar_gen_s(h_max)
+        mus, logvars = mu_logvars.view(-1, self.static_latent_dim, 2).unbind(-1) # B x D 
+        zs = self.reparametrize(mus, logvars) # B x D 
+        zs = zs.unsqueeze(0).repeat(T, 1, 1).view(T * batch_size, -1)
 
         return zs, zdt, (mus, logvars), (mu_d0, logvar_d0)
 
