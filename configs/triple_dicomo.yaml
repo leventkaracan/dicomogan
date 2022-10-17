@@ -70,7 +70,7 @@ model:
         coarse_cut_flag: False 
         medium_cut_flag: False
         fine_cut_flag: False
-        mod_shape : [[1, 4, 512], [1, 4, 512], [1, 10, 512]]
+        mod_shape : [[1, 4, 1], [1, 4, 1], [1, 10, 1]]
         attr_vec_dims: [512, 32, 32]# much match W_cont + CLIP embedding
 
 

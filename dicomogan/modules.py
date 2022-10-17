@@ -444,7 +444,7 @@ class EncoderVideo_LatentODE(nn.Module):
         #print(zdt.size())
         zdt = zdt.view(batch_size * T, -1) # T*B x D 
 
-        # Question: why using hs and not h_max? Isn't redundent? TODO: optimize later
+        # Question: why using hs and not h_max? Isn't redundent? RIP
         mu_logvars = self.mu_logvar_gen_s(h_max)
         mus, logvars = mu_logvars.view(-1, self.static_latent_dim, 2).unbind(-1) # B x D 
         zs = self.reparametrize(mus, logvars) # B x D 
