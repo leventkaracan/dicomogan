@@ -87,7 +87,7 @@ class VideoDataFashion(data.Dataset):
 
                     if self.inversion_root is not None:
                         i_paths[int(imname)] = os.path.join(os.path.join(self.inversion_root, fname, imname + ".pt"))
-                elif is_text_file(f) and f == 'updated_descriptions.txt': # TODO: hard code for now 
+                elif is_text_file(f): # TODO: hard code for now 
                     d_paths.append(os.path.join(self.img_root, fname, f))
             
             if self.attribute is not None:

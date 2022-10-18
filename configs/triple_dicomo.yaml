@@ -44,11 +44,11 @@ model:
     #     img_size : [3,128,96] # must match video_encoder
     #     latent_dim : 88 # should match static_latent_dim + dynamic_latent_dim
 
-    # text_encoder_config:
-    #   target: dicomogan.modules.TextEncoder
-    #   params:
-    #     text_size : 512
-    #     latent_dim : 24 # must match vae_cond_enc
+    text_encoder_config:
+      target: dicomogan.modules.TextEncoder
+      params:
+        text_size : 512
+        latent_dim : 24 # must match vae_cond_enc
 
     stylegan_gen_config:
       target: dicomogan.models.stylegan.StyleGAN2Generator
@@ -72,7 +72,17 @@ model:
         medium_cut_flag: False
         fine_cut_flag: False
         mod_shape : [[1, 4, 1], [1, 4, 1], [1, 10, 1]]
-        attr_vec_dims: [512, 32, 32]# much match W_cont + CLIP embedding
+        attr_vec_dims: [24, 32, 32]# much match W_cont + CLIP embedding
+    
+    dim_loss_config:
+      target: dicomogan.losses.dim_loss.DIMLoss
+      params:
+        n_units : 1024
+        embed1_dim : 24 
+        embed2_dim : 24 
+        measure : 'JSD'
+        mode : 'fd'
+        act_penalty : 0.0
 
 
     
