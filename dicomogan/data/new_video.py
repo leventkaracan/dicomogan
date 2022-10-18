@@ -50,7 +50,15 @@ class VideoDataFashion(data.Dataset):
         
         self.base_seed = np.random.randint(100000)
         self.img_root = img_root
-        self.video_list = open(video_list).readlines()
+
+        if not isinstance(video_list, list):
+            video_list = [video_list]
+        
+        self.video_list = set()
+        for lst in video_list:
+            self.video_list = self.video_list.union(set(open(lst).readlines()))
+        self.video_list = list(self.video_list)
+
         self.inversion_root = inversion_root
         self.inverted_img_root = inverted_img_root
         self.n_sampled_frames = n_sampled_frames   
@@ -79,7 +87,7 @@ class VideoDataFashion(data.Dataset):
 
                     if self.inversion_root is not None:
                         i_paths[int(imname)] = os.path.join(os.path.join(self.inversion_root, fname, imname + ".pt"))
-                elif is_text_file(f):
+                elif is_text_file(f) and f == 'updated_descriptions.txt': # TODO: hard code for now 
                     d_paths.append(os.path.join(self.img_root, fname, f))
             
             if self.attribute is not None:
@@ -119,7 +127,13 @@ class VideoDataFashion(data.Dataset):
         # load text 
         rnd_txt = np.random.randint(len(self.desc_paths[index]))
         raw_desc = open(self.desc_paths[index][rnd_txt]).readlines()[0]
+
+        # TODO: fix later
+        raw_desc = raw_desc.replace('Multi', 'Multi Color')
         return_list['raw_desc'] = raw_desc
+
+        
+
 
         # load attribute
         if self.attribute is not None:
