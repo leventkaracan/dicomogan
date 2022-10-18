@@ -52,12 +52,12 @@ class VideoDataFashion(data.Dataset):
         self.img_root = img_root
 
         if not isinstance(video_list, list):
-            video_list = [video_list]
-        
-        self.video_list = set()
-        for lst in video_list:
-            self.video_list = self.video_list.union(set(open(lst).readlines()))
-        self.video_list = list(self.video_list)
+            self.video_list = open(video_list).readlines()
+        else:
+            self.video_list = set()
+            for lst in video_list:
+                self.video_list = self.video_list.union(set(open(lst).readlines()))
+            self.video_list = list(self.video_list)
 
         self.inversion_root = inversion_root
         self.inverted_img_root = inverted_img_root
