@@ -392,7 +392,8 @@ class EncoderVideo_LatentODE(nn.Module):
             delta_t = torch.cat((delta_t, torch.zeros(1).cuda()))
             delta_t = delta_t.unsqueeze(1).repeat((1,batch_size)).unsqueeze(-1)
             h = torch.cat((delta_t, h),-1)
-
+	
+        h = h.permute(1,0,2)
         rnn_out, _ = self.rnn(h.float())
         #print(rnn_out.size())
         hd_z0 = rnn_out[-1]
@@ -456,7 +457,8 @@ class EncoderVideo_LatentODE(nn.Module):
             delta_t = torch.cat((delta_t, torch.zeros(1).cuda()))
             delta_t = delta_t.unsqueeze(1).repeat((1,batch_size)).unsqueeze(-1)
             h = torch.cat((delta_t, h),-1)
-
+	
+        h = h.permute(1,0,2)
         rnn_out, _ = self.rnn(h.float())
         #print(rnn_out.size())
         hd_z0 = rnn_out[-1]
