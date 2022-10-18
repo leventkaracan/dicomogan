@@ -313,18 +313,18 @@ class EncoderVideo(nn.Module):
 
 class EncoderVideo_LatentODE(nn.Module):
     def __init__(self, img_size, odefunc,
-                 static_latent_dim=5, dynamic_latent_dim=1, hid_channels = 32, kernel_size = 4, hidden_dim = 256):
+                 static_latent_dim=5, dynamic_latent_dim=1, hid_channels = 32, kernel_size = 4, hidden_dim = 256, use_last_gru_hidden=True):
 
         # 3dShapes_dataset: static_latent_dim=5, dynamic_latent_dim=1, hid_channels = 32, kernel_size = 4, hidden_dim = 256
         # fashion_dataset: static_latent_dim=12, dynamic_latent_dim=4,, hid_channels = 32, kernel_size = 4, hidden_dim = 256
 
         super(EncoderVideo_LatentODE, self).__init__()
 
-
         self.static_latent_dim = static_latent_dim
         self.dynamic_latent_dim = dynamic_latent_dim
         self.img_size = img_size
         self.odefunc = odefunc
+        self.use_last_gru_hidden = use_last_gru_hidden
         # Shape required to start transpose convs
 
         n_chan = self.img_size[0]
@@ -339,8 +339,8 @@ class EncoderVideo_LatentODE(nn.Module):
         if self.img_size[1] == self.img_size[2] == 64:
             self.reshape = (hid_channels * 2, kernel_size, kernel_size)
             self.conv_64 = nn.Conv2d(hid_channels * 2 , hid_channels * 2, kernel_size, **cnn_kwargs)
-        elif self.img_size[1] == 128:
 
+        elif self.img_size[1] == 128:
             self.reshape = (hid_channels * 4, 4, 3)
             #print(self.reshape)
             self.conv_64 = nn.Conv2d(hid_channels * 2 , hid_channels * 4, kernel_size, **cnn_kwargs)
@@ -348,19 +348,12 @@ class EncoderVideo_LatentODE(nn.Module):
 
         # Fully connected layers
         self.lin1 = nn.Linear(np.product(self.reshape), hidden_dim)
-        #self.lin2 = nn.Linear(hidden_dim, hidden_dim)
 
         # Fully connected layers for mean and variance
         self.mu_logvar_gen_s = nn.Linear(hidden_dim, self.static_latent_dim * 2)
         self.mu_logvar_gen_d = nn.Linear(hidden_dim, self.dynamic_latent_dim * 2)
 
-
-        self.use_delta_t = True
-
-        if self.use_delta_t:
-            self.rnn = nn.GRU(hidden_dim + 1, hidden_dim, batch_first=False)
-        else:
-            self.rnn = nn.GRU(hidden_dim, hidden_dim, batch_first=False)
+        self.rnn = nn.GRU(hidden_dim + 1, hidden_dim, batch_first=False)
 
         self.apply(kaiming_init)
 
@@ -372,9 +365,6 @@ class EncoderVideo_LatentODE(nn.Module):
     def forward(self, x, t): # x: B x T x C x H x W , t: (B x T)
         batch_size = x.size(0)
         T = x.size(1)
-        h = []
-        zs = []
-        mu_logvar_s=[]
 
         xi = x.permute(1, 0, 2, 3, 4).contiguous() # T x B x C x H x W
         xi = xi.reshape(T*batch_size, x.shape[2], x.shape[3], x.shape[4]) # T*B x C x H x W
@@ -387,65 +377,48 @@ class EncoderVideo_LatentODE(nn.Module):
             xi = torch.relu(self.conv_64(xi))
         elif self.img_size[1] == 128:
             xi = torch.relu(self.conv_64(xi))
-            xi = torch.relu(self.conv_128(xi))
+            xi = torch.relu(self.conv_128(xi)) # T*B x C'x H'x W'
+
         # Fully connected layers with ReLu activations
-        xi = xi.view((T * batch_size, -1))
-        hi = torch.relu(self.lin1(xi))
+        xi = xi.view((T * batch_size, -1)) # T*B x C' * H' * W'
+        hi = torch.relu(self.lin1(xi)) # T * B x D
         h = hi.view(T, batch_size, -1)  # T x B x D
-        
-        # # # Levent Implemetnation
-        # for i in range(T):
-        #     xi = x[:,i]
-        # # Convolutional layers with ReLu activations
-        #     xi = torch.relu(self.conv1(xi))
-        #     xi = torch.relu(self.conv2(xi))
-        #     xi = torch.relu(self.conv3(xi))
-        #     if self.img_size[1] == self.img_size[2] == 64:
-        #         xi = torch.relu(self.conv_64(xi))
-        #     elif self.img_size[1] == 128:
-        #         xi = torch.relu(self.conv_64(xi))
-        #         xi = torch.relu(self.conv_128(xi))
-        # # Fully connected layers with ReLu activations
-        #     xi = xi.view((batch_size, -1))
-        #     hi = torch.relu(self.lin1(xi))
-        #     h.append(hi)
-        # h = torch.stack(h) # T x B x D
 
         h_max = torch.max(h, dim=0)[0] # B x D
         # hs = h_max.repeat(T,1,1) # T x B x D
 
-        isReverse = True
+        isReverse = True # TODO: fix later
         if isReverse:
             # we are going backwards in time with
             h = reverse(h) # T x B x D
         
+        self.use_delta_t = True #TODO: fix later
         if self.use_delta_t:
-            delta_t = t[1:] - t[:-1]# B x T 
+            delta_t = t[1:] - t[:-1] # T - 1 
             if isReverse:
                 # we are going backwards in time with
                 delta_t = utils.reverse(delta_t)
-            delta_t = torch.cat((delta_t, torch.zeros(1).to(delta_t.device)))
-            delta_t = delta_t.unsqueeze(1).repeat((1,batch_size)).unsqueeze(-1) # concat time. Why not pos encoding?  # T x B x (D+1)
-            h = torch.cat((delta_t, h),-1)
+            delta_t = torch.cat((delta_t, torch.zeros(1).to(delta_t.device))) # T
+            delta_t = delta_t.unsqueeze(1).repeat((1,batch_size)).unsqueeze(-1) # concat time. Why not pos encoding?  # T x B x 1
+            h = torch.cat((delta_t, h),-1) # T x B x (D+1)
 
-        rnn_out, _ = self.rnn(h.float()) # this uses static and dynamic features
-        #print(rnn_out.size())
-        hd_z0 = rnn_out[-1] # B x D
-        #hd_z0 = torch.tanh(hd_z0)
+        rnn_out, last_hidden = self.rnn(h.float()) # this uses static and dynamic features
+        if self.use_last_gru_hidden:
+            hd_z0 = last_hidden[0] # TODO: test this when switching to bidirectonal
+        else:
+            hd_z0 = rnn_out[-1] # B x D
+
         mu_logvar_d0 = self.mu_logvar_gen_d(hd_z0) # B x D' * 2
         mu_d0, logvar_d0 = mu_logvar_d0.view(-1, self.dynamic_latent_dim, 2).unbind(-1)
 
-        zd0 = self.reparametrize(mu_d0, logvar_d0) # B x D' (Where D' = 1 in our code :/)
+        zd0 = self.reparametrize(mu_d0, logvar_d0) # B x D' 
         zd0 = zd0.to(torch.float64)
-
         zdt = odeint(self.odefunc,zd0,t,method='dopri5') # aren't we here solving the ODE jointly for all videos? Shouldn't we separate them?
-        
-        zdt = zdt.to(torch.float32)
-        #print(zdt.size())
+        zdt = zdt.to(torch.float32) # T x B x D
         zdt = zdt.view(batch_size * T, -1) # T*B x D 
 
         # Question: why using hs and not h_max? Isn't redundent? RIP
-        mu_logvars = self.mu_logvar_gen_s(h_max)
+        mu_logvars = self.mu_logvar_gen_s(h_max) # B x 2 * D
         mus, logvars = mu_logvars.view(-1, self.static_latent_dim, 2).unbind(-1) # B x D 
         zs = self.reparametrize(mus, logvars) # B x D 
         zs = zs.unsqueeze(0).repeat(T, 1, 1).view(T * batch_size, -1)

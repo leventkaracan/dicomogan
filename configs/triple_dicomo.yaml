@@ -78,7 +78,7 @@ model:
 data:
   target: main.DataModuleFromConfig
   params:
-    batch_size: 3 # MUST Match batch size in dataset
+    batch_size: 2 # MUST Match batch size in dataset
     num_workers: 10
     train:
       target: dicomogan.data.new_video.VideoDataFashion # Changed from data.video.VideoDataFashion to data.new_video.VideoDataFashion
@@ -90,7 +90,7 @@ data:
         skip_frames : 5
         n_sampled_frames : 6
         irregular_sampling : True
-        batch_size : 3 #MUST match batch size 
+        batch_size : 2 #MUST match batch size 
         # crop : [512, 384]
         size : [256, 192]
         # attribute : "Color"
@@ -106,7 +106,7 @@ data:
         skip_frames : 5
         n_sampled_frames : 6
         irregular_sampling : False
-        batch_size : 3 #MUST match batch size 
+        batch_size : 2 #MUST match batch size 
         # crop : [512, 384]
         size : [256, 192]
         # attribute : "Color"
