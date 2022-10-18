@@ -358,9 +358,9 @@ class EncoderVideo_LatentODE(nn.Module):
         self.use_delta_t = True
 
         if self.use_delta_t:
-            self.rnn = nn.GRU(hidden_dim + 1, hidden_dim, batch_first=True)
+            self.rnn = nn.GRU(hidden_dim + 1, hidden_dim, batch_first=False)
         else:
-            self.rnn = nn.GRU(hidden_dim, hidden_dim, batch_first=True)
+            self.rnn = nn.GRU(hidden_dim, hidden_dim, batch_first=False)
 
         self.apply(kaiming_init)
 
