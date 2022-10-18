@@ -69,6 +69,7 @@ class CLIPLoss(pl.LightningModule):
         super(CLIPLoss, self).__init__()
         self.model, clip_preprocess = clip.load(clip_model, device=self.device)
         self.norm = norm
+        self.eps = 1e-5
         # freeze clip model
         for param in self.model.parameters():
             param.requires_grad = False
@@ -168,6 +169,9 @@ class CLIPLoss(pl.LightningModule):
 
         pos_direction = (pos_style_embed.float().contiguous()  - ref_style_embed.float().contiguous())
         neg_direction = (pos_encoding.float().contiguous()  - neg_encoding.float().contiguous())
+
+        pos_direction += self.eps
+        neg_direction += self.eps
 
         if norm:
             pos_direction = pos_direction / (pos_direction.norm(dim=-1, keepdim=True))
