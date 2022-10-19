@@ -7,7 +7,7 @@ import os
 
 # Here, I assume that the real and fake images have been stored in .npy files, but we can easily change that if necessary
 class MetricsDataset(Dataset):
-    def __init__(self, path_to_real_images, path_to_fake_images):
+    def __init__(self, path_to_real_images, path_to_fake_images, transform=None):
         super().__init__()
 
         self.path_to_real_images = path_to_real_images
@@ -15,7 +15,10 @@ class MetricsDataset(Dataset):
 
         self.real_images, self.fake_images = self._load_dataset()
 
-        self.transform = transforms.ToTensor()
+        if transform == None:
+            self.transform = transforms.ToTensor()
+        else:
+            self.transform = transform
 
 
     def _load_dataset(self):
@@ -48,6 +51,8 @@ class MetricsDataset(Dataset):
             
             real_images.append(current_real_images)
             fake_images.append(current_fake_images)
+            
+        
         
         return real_images, fake_images
 
