@@ -313,7 +313,8 @@ class EncoderVideo(nn.Module):
 
 class EncoderVideo_LatentODE(nn.Module):
     def __init__(self, img_size, odefunc,
-                 static_latent_dim=5, dynamic_latent_dim=1, hid_channels = 32, kernel_size = 4, hidden_dim = 256, use_last_gru_hidden=True):
+                 static_latent_dim=5, dynamic_latent_dim=1, hid_channels = 32, kernel_size = 4, hidden_dim = 256, use_last_gru_hidden=False,
+                 bidirectional_gru=True, num_GRU_layers=4):
 
         # 3dShapes_dataset: static_latent_dim=5, dynamic_latent_dim=1, hid_channels = 32, kernel_size = 4, hidden_dim = 256
         # fashion_dataset: static_latent_dim=12, dynamic_latent_dim=4,, hid_channels = 32, kernel_size = 4, hidden_dim = 256
@@ -325,6 +326,8 @@ class EncoderVideo_LatentODE(nn.Module):
         self.img_size = img_size
         self.odefunc = odefunc
         self.use_last_gru_hidden = use_last_gru_hidden
+        self.num_GRU_layers = num_GRU_layers
+        self.bidirectional_gru = bidirectional_gru
         # Shape required to start transpose convs
 
         n_chan = self.img_size[0]
@@ -351,9 +354,11 @@ class EncoderVideo_LatentODE(nn.Module):
 
         # Fully connected layers for mean and variance
         self.mu_logvar_gen_s = nn.Linear(hidden_dim, self.static_latent_dim * 2)
-        self.mu_logvar_gen_d = nn.Linear(hidden_dim, self.dynamic_latent_dim * 2)
 
-        self.rnn = nn.GRU(hidden_dim + 1, hidden_dim, batch_first=False)
+        d_hidden_dim = hidden_dim * 2 if bidirectional_gru else hidden_dim
+        self.mu_logvar_gen_d = nn.Linear(d_hidden_dim, self.dynamic_latent_dim * 2)
+
+        self.rnn = nn.GRU(hidden_dim + 1, hidden_dim, num_layers=num_GRU_layers, bidirectional=bidirectional_gru, batch_first=False)
 
         self.apply(kaiming_init)
 
@@ -404,10 +409,14 @@ class EncoderVideo_LatentODE(nn.Module):
 
         rnn_out, last_hidden = self.rnn(h.float()) # this uses static and dynamic features
         if self.use_last_gru_hidden:
-            hd_z0 = last_hidden[0] # TODO: test this when switching to bidirectonal
+            # TODO: fix 
+            if self.bidirectional_gru:
+                hd_z0 = torch.cat((last_hidden[0], last_hidden[1]), -1)
+            else:
+                hd_z0 = last_hidden[0] # TODO: test this when switching to bidirectonal
         else:
             hd_z0 = rnn_out[-1] # B x D
-
+        
         mu_logvar_d0 = self.mu_logvar_gen_d(hd_z0) # B x D' * 2
         mu_d0, logvar_d0 = mu_logvar_d0.view(-1, self.dynamic_latent_dim, 2).unbind(-1)
 

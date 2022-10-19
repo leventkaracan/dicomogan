@@ -279,12 +279,14 @@ class DiCoMOGANCLIP(pl.LightningModule):
 
 
         reconstruction_loss = self.rec_loss(reconstruction_inp_res, video_sample_norm)
-        latent_loss = self.l2_latent_loss(src_inversion, w_latents) 
-        latent_loss += 2 * self.l2_latent_loss(src_inversion, w_latents_txt_mismatched)
+
+
+        # latent_loss = self.l2_latent_loss(src_inversion, w_latents) 
+        # latent_loss += 2 * self.l2_latent_loss(src_inversion, w_latents_txt_mismatched)
 
         # TODO: experiment with Hinge loss
-        # latent_loss = torch.maximum(self.l2_latent_loss(src_inversion, w_latents) - self.l2_latent_eps / 2, torch.zeros(1).to(inversions.device)[0]) 
-        # latent_loss += torch.maximum(self.l2_latent_loss(src_inversion, w_latents_txt_mismatched) - self.l2_latent_eps, torch.zeros(1).to(inversions.device)[0])
+        latent_loss = torch.maximum(self.l2_latent_loss(src_inversion, w_latents) - self.l2_latent_eps / 2, torch.zeros(1).to(src_inversion.device)[0]) 
+        latent_loss += torch.maximum(self.l2_latent_loss(src_inversion, w_latents_txt_mismatched) - self.l2_latent_eps, torch.zeros(1).to(src_inversion.device)[0])
         vgg_loss = self.criterionVGG(reconstruction_inp_res / 2 + 0.5, video_sample)
         
         
