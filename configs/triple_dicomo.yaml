@@ -28,15 +28,16 @@ model:
         nhidden : 256 
 
     video_ecnoder_config:
-      target: dicomogan.modules.EncoderVideo_LatentODE
+      target: dicomogan.new_modules.EncoderVideo_LatentODE
       params:
-        img_size : [3,128,96] # must match video_decoder
+        img_size : [128,96] # must match video_decoder
         static_latent_dim : 56
         dynamic_latent_dim : 32 # must match ODE_func_config latent_dim
         hid_channels : 32 
         kernel_size : 4
         hidden_dim : 256
         use_last_gru_hidden : False # True is not working 
+        global_code_ch : 32 # much match dynamic latent for now 
     
     video_decoder_config:
       target: dicomogan.modules.Decoder
@@ -90,7 +91,7 @@ data:
         inversion_root: /scratch/users/abond19/datasets/w+_fashion_dataset/fashion/PTI
         skip_frames : 5
         n_sampled_frames : 6
-        irregular_sampling : True
+        irregular_sampling : False
         batch_size : 2 #MUST match batch size 
         # crop : [512, 384]
         size : [256, 192]

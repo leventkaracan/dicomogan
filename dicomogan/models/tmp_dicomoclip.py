@@ -76,8 +76,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         # self.lambda_D = lambda_D
 
         # initialize model
-        self.func = instantiate_from_config(ODE_func_config) 
-        self.bVAE_enc = instantiate_from_config(video_ecnoder_config, odefunc=self.func) 
+        self.bVAE_enc = instantiate_from_config(video_ecnoder_config) 
         self.bVAE_dec = instantiate_from_config(video_decoder_config)
         self.text_enc = instantiate_from_config(text_encoder_config)
         #self.mapping = instantiate_from_config(mapping_config) 
@@ -236,9 +235,9 @@ class DiCoMOGANCLIP(pl.LightningModule):
         self.log("train/recon_loss", recon_loss, prog_bar=True, logger=True, on_step=True, on_epoch=False)
         self.log("train/recon_lossT", recon_lossT, prog_bar=False, logger=True, on_step=True, on_epoch=False)
 
-        kl_loss_d = self.beta * self.kl_divergence(*mu_logvar_d)
+        # kl_loss_d = self.beta * self.kl_divergence(*mu_logvar_d)
         kl_loss_s = self.beta * self.kl_divergence(*mu_logvar_s)
-        kl_loss = kl_loss_s +  kl_loss_d
+        kl_loss = kl_loss_s # +  kl_loss_d
         self.log("train/kl_loss", kl_loss, prog_bar=True, logger=True, on_step=True, on_epoch=False)
 
         beta_vae_loss = 0.5 * (recon_loss + recon_lossT) +  kl_loss
@@ -392,7 +391,9 @@ class DiCoMOGANCLIP(pl.LightningModule):
         mismatch_txt_feat, _ = self.preprocess_text_feat(txt_feat, mx_roll=2)
         mismatched_video_style, _ = self.preprocess_text_feat(video_style, mx_roll=2)
 
-
+        # print("zt", zT.shape)
+        # print('cont', video_content.shape)
+        # print("dy", video_dynamics.shape)
         x_reconT = self.bVAE_dec(torch.cat((zT, video_content, video_dynamics), 1)) # T*B x C x H/2 x W/2
         x_recon = self.bVAE_dec(torch.cat((video_style, video_content, video_dynamics), 1)) # T*B x C x H/2 x W/2
         x_recon_mismatched = self.bVAE_dec(torch.cat((mismatched_video_style, video_content, video_dynamics), 1)) # T*B x C x H/2 x W/2
