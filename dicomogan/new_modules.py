@@ -131,16 +131,25 @@ class EncoderVideo_LatentODE(nn.Module):
         T = x.size(1)
 
         xi = x.permute(1, 0, 2, 3, 4).contiguous() # T x B x C x H x W
+
+
         xi = xi.reshape(T*batch_size, x.shape[2], x.shape[3], x.shape[4]) # T*B x C x H x W
-
-        # Convolutional layers with ReLu activations
         xi, xi_gl = self.swapae_encoder(xi) # xi: T*B x spatial_code_ch x H' x W', xi_gl: T*B x global_code_ch
-        # print("spa xi", xi.shape)
-        # print("xi_gl", xi_gl.shape)
-
-
-        # Dynamics:
         xi = xi.view(T, batch_size, xi.shape[1], xi.shape[2], xi.shape[3]) # T x B x D' x H' x W'
+        xi_gl = xi_gl.view(T, batch_size, -1)  # T x B x D'
+
+
+        # all_xi, all_xi_gl = [], []
+        # for sub_x in xi:
+        #     sub_a, sub_b = self.swapae_encoder(sub_x)
+        #     all_xi.append(sub_a)
+        #     all_xi_gl.append(sub_b)
+        
+        # xi = torch.stack(all_xi, 0) # T x B x D' x H' x W'
+        # xi_gl = torch.stack(all_xi_gl, 0) # T x B x D'
+
+
+
 
         ##### ODE encoding
         mask = torch.zeros(T, 1) # TODO: make mask
@@ -149,8 +158,6 @@ class EncoderVideo_LatentODE(nn.Module):
         mask[inds, :] = 1
         mask = mask.unsqueeze(0).repeat(batch_size, 1, 1).to(xi.device) # B x T x 1
         zd0, _ = self.encoder_z0(input_tensor=xi, time_steps=t, mask=mask) # B x spatial_code_ch x H' x W'
-        # print("zd0 1", zd0[0])
-        # print("zd0 2", zd0[1])
 
         # solve for the whole video
         zd0 = zd0.to(torch.float64)
@@ -164,20 +171,11 @@ class EncoderVideo_LatentODE(nn.Module):
 
         # Question: why using hs and not h_max? Isn't redundent? RIP
         # TODO: experiment with non stocastic sampling
-        xi_gl = xi_gl.view(T, batch_size, -1)  # T x B x D'
-        # print("xi_gl 1", xi_gl[0, 0])
-        # print("xi_gl 2", xi_gl[0, 1])
+        
         h_max = torch.max(xi_gl, dim=0)[0] # B x D'
-        # print("hmax 1", h_max[0])
-        # print("hmax 2", h_max[1])
-
         mu_logvars = self.mu_logvar_gen_s(h_max) # B x 2 * D''
         mus, logvars = mu_logvars.view(-1, self.static_latent_dim, 2).unbind(-1) # B x D'' 
         zs = self.reparametrize(mus, logvars) # B x D ''
         zs = zs.unsqueeze(0).repeat(T, 1, 1).view(T * batch_size, -1)
-        # print("dt, V1T1", zdt[0])
-        # print("dt, V1T2", zdt[batch_size])
-        # print("dt, V2T1", zdt[1])
-        # print("dt, V2T2", zdt[batch_size+1])
 
         return zs, zdt, (mus, logvars), (None, None)
