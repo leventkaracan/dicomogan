@@ -49,7 +49,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
                     n_critic = 1,
                     ckpt_path=None,
                     ignore_keys=[], 
-                    video_length = 50,
+                    video_length = 6,
                     frame_log_size=(256, 192)
                     ):
         super().__init__()
@@ -206,6 +206,15 @@ class DiCoMOGANCLIP(pl.LightningModule):
 
         # encode text
         txt_feat = self.clip_encode_text(input_desc)  # B x D
+
+        # vae encode text
+        muT, logvarT = self.text_enc(txt_feat) 
+        zT = self.reparametrize(muT, logvarT) # B x D'
+        zT = zT.unsqueeze(0).repeat(T, 1, 1)
+        zT = zT.contiguous().view(T*bs, -1)
+        text_video_style = zT
+
+        # repeat text features 
         txt_feat_tf = txt_feat.unsqueeze(0).repeat(T, 1, 1) # T x B x D
         txt_feat = txt_feat_tf.contiguous().view(T*bs, -1)  # T*B x D
         txt_feat.requires_grad = False
@@ -220,12 +229,6 @@ class DiCoMOGANCLIP(pl.LightningModule):
         vgg_loss = 0 
         beta_vae_loss = 0
         G_loss = 0
-
-        # Train vae and generator
-        # vae encode text
-        muT, logvarT = self.text_enc(txt_feat)
-        zT = self.reparametrize(muT, logvarT) # T*B x D 
-        text_video_style = zT
 
         x_reconT = self.bVAE_dec(torch.cat((zT, video_content, video_dynamics), 1)) # T*B x C x H/2 x W/2
         x_recon = self.bVAE_dec(torch.cat((video_style, video_content, video_dynamics), 1)) # T*B x C x H/2 x W/2
@@ -370,10 +373,21 @@ class DiCoMOGANCLIP(pl.LightningModule):
         vid_rs = vid_rs_full.view(T, bs, ch, int(height*0.5),int(width*0.5) )
         vid_rs = vid_rs.permute(1,0,2,3,4) #  B x T x C x H//2 x W//2
 
+
         # encode text
         txt_feat = self.clip_encode_text(input_desc)  # B x D
-        txt_feat = txt_feat.unsqueeze(0).repeat(T,1,1)
-        txt_feat = txt_feat.view(bs * T, -1)  # T*B x D
+
+        # vae encode text
+        muT, logvarT = self.text_enc(txt_feat) 
+        zT = self.reparametrize(muT, logvarT) # B x D'
+        zT = zT.unsqueeze(0).repeat(T, 1, 1)
+        zT = zT.contiguous().view(T*bs, -1)
+        text_video_style = zT
+
+        # repeat text features 
+        txt_feat_tf = txt_feat.unsqueeze(0).repeat(T, 1, 1) # T x B x D
+        txt_feat = txt_feat_tf.contiguous().view(T*bs, -1)  # T*B x D
+        txt_feat.requires_grad = False
 
         # vae encode frames
         zs, zd, mu_logvar_s, mu_logvar_d = self.bVAE_enc(vid_rs, ts)
@@ -381,9 +395,6 @@ class DiCoMOGANCLIP(pl.LightningModule):
         video_content = zs[:, self.vae_cond_dim:]
         video_dynamics = zd
 
-        muT, logvarT = self.text_enc(txt_feat)
-        zT = self.reparametrize(muT, logvarT) # T*B x D 
-        
         # generate with mathching text
         # latentw = self.mapping(z_vid[:,self.vae_cond_dim:])
         

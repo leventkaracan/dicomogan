@@ -15,8 +15,8 @@ model:
     lambda_bvae: 1
     rec_loss_lambda : 0.5
     l2_latent_lambda : 1.0
-    clip_loss_lambda : 1.0
-    consistency_lambda : 0.1
+    clip_loss_lambda : 0.0
+    consistency_lambda : 0.0
     
     vae_cond_dim : 24 # must match text encoder latent_dim
     beta: 8
@@ -36,8 +36,10 @@ model:
         hid_channels : 32 
         kernel_size : 4
         hidden_dim : 256
-        use_last_gru_hidden : False # True is not working 
-        global_code_ch : 32 # much match dynamic latent for now 
+        netE_num_downsampling_sp : 3
+        netE_num_downsampling_gl : 1
+        spatial_code_ch : 256
+        global_code_ch : 512 
     
     video_decoder_config:
       target: dicomogan.modules.Decoder
