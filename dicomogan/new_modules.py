@@ -32,7 +32,7 @@ def reverse(tensor):
 class EncoderVideo_LatentODE(nn.Module):
     def __init__(self, img_size, static_latent_dim=5, dynamic_latent_dim=1, hid_channels = 32, kernel_size = 4, hidden_dim = 256, use_last_gru_hidden=False,
                  bidirectional_gru=True, num_GRU_layers=1, num_encoder_layers=4, num_conv_layers=2, n_samples=100, 
-                 netE_num_downsampling_sp=3, netE_num_downsampling_gl=1, spatial_code_ch=256, global_code_ch=512):
+                 netE_num_downsampling_sp=3, netE_num_downsampling_gl=1, spatial_code_ch=256, global_code_ch=512, sampling_type="Static"):
 
         # 3dShapes_dataset: static_latent_dim=5, dynamic_latent_dim=1, hid_channels = 32, kernel_size = 4, hidden_dim = 256
         # fashion_dataset: static_latent_dim=12, dynamic_latent_dim=4,, hid_channels = 32, kernel_size = 4, hidden_dim = 256
@@ -49,6 +49,7 @@ class EncoderVideo_LatentODE(nn.Module):
         self.num_GRU_layers = num_GRU_layers
         self.bidirectional_gru = bidirectional_gru
         self.n_samples = n_samples
+        self.sampling_type = sampling_type
 
         # channels for encoder, ODE, init decoder
         resize = 2 ** netE_num_downsampling_sp
@@ -154,8 +155,18 @@ class EncoderVideo_LatentODE(nn.Module):
         ##### ODE encoding
         mask = torch.zeros(T, 1) # TODO: make mask
         # TODO: differenciate between interp and exterp when sampling
-        inds = np.random.choice(T, min(self.n_samples, T), replace=False)
-        mask[inds, :] = 1
+        if self.sampling_type == "Interpolate":
+            inds = np.random.choice(np.arange(1, T-1), min(self.n_samples, T) - 4, replace=False)
+            mask[inds, :] = 1
+            mask[0, :] = 1
+            mask[T-1, :] = 1
+        elif self.sampling_type == "Extrapolate":
+            #inds = np.random.choice(T-1, min(self.n_samples, T) - 1, replace=False)
+            inds = np.arange(0, T-1)
+            mask[inds, :] = 1
+            #mask[0, :] = 1
+        elif self.sampling_type == "Static":
+            mask = torch.ones(T, 1)
         mask = mask.unsqueeze(0).repeat(batch_size, 1, 1).to(xi.device) # B x T x 1
         zd0, _ = self.encoder_z0(input_tensor=xi, time_steps=t, mask=mask) # B x spatial_code_ch x H' x W'
 

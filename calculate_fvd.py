@@ -13,14 +13,14 @@ from fvd.fvd_utils import *
 
 # Assuming that all real images and all fake images are stored in folders
 path_to_real_images = "/scratch/users/abond19/datasets/aligned_fashion_dataset/"
-path_to_fake_images = "/scratch/users/abond19/datasets/inverted_fashion_dataset/"
+path_to_fake_images = "/kuacc/users/mali18/dicomogan/model_outputs/_no_rec_loss_after_fix2022-10-18T21-43-53/test/"
 
 dataset = MetricsDataset(path_to_real_images, path_to_fake_images)
 
 BATCH_SIZE = 1
 TARGET_RESOLUTION = (224, 224)
 
-dataloader = DataLoader(dataset, batch_size=BATCH_SIZE)
+dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
 
 real_activations = []
 fake_activations = []
