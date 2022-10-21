@@ -69,9 +69,9 @@ model:
       target: dicomogan.models.mapper.TripleAttributeMapper
       params:
         predict_delta: True
-        use_coarse_mapper: [True, True, True] # Since the coarse mapper only handles pose, we don't want to do any modulation
-        use_medium_mapper: [True, True, True]
-        use_fine_mapper: [True, True, False] 
+        use_coarse_mapper: [True, True, False] # Since the coarse mapper only handles pose, we don't want to do any modulation
+        use_medium_mapper: [True, True, False]
+        use_fine_mapper: [True, False, False] 
         coarse_cut_flag: False 
         medium_cut_flag: False
         fine_cut_flag: False

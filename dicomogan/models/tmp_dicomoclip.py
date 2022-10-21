@@ -77,8 +77,8 @@ class DiCoMOGANCLIP(pl.LightningModule):
 
         # initialize model
         self.bVAE_enc = instantiate_from_config(video_ecnoder_config) 
-        self.bVAE_dec = instantiate_from_config(video_decoder_config)
-        self.text_enc = instantiate_from_config(text_encoder_config)
+        #self.bVAE_dec = instantiate_from_config(video_decoder_config)
+        #self.text_enc = instantiate_from_config(text_encoder_config)
         #self.mapping = instantiate_from_config(mapping_config) 
         self.style_mapper = instantiate_from_config(style_mapper_config)
         self.stylegan_G = instantiate_from_config(stylegan_gen_config)
@@ -208,11 +208,11 @@ class DiCoMOGANCLIP(pl.LightningModule):
         txt_feat = self.clip_encode_text(input_desc)  # B x D
 
         # vae encode text
-        muT, logvarT = self.text_enc(txt_feat) 
-        zT = self.reparametrize(muT, logvarT) # B x D'
-        zT = zT.unsqueeze(0).repeat(T, 1, 1)
-        zT = zT.contiguous().view(T*bs, -1)
-        text_video_style = zT
+        #muT, logvarT = self.text_enc(txt_feat) 
+        #zT = self.reparametrize(muT, logvarT) # B x D'
+        #zT = zT.unsqueeze(0).repeat(T, 1, 1)
+        #zT = zT.contiguous().view(T*bs, -1)
+        #text_video_style = zT
 
         # repeat text features 
         txt_feat_tf = txt_feat.unsqueeze(0).repeat(T, 1, 1) # T x B x D
@@ -220,9 +220,9 @@ class DiCoMOGANCLIP(pl.LightningModule):
         txt_feat.requires_grad = False
 
         # vae encode frames
-        zs, zd, mu_logvar_s, mu_logvar_d = self.bVAE_enc(vid_rs_bf, ts)
-        video_style = zs[:, :self.vae_cond_dim]
-        video_content = zs[:, self.vae_cond_dim:]
+        zd = self.bVAE_enc(vid_rs_bf, ts)
+        #video_style = zs[:, :self.vae_cond_dim]
+        #video_content = zs[:, self.vae_cond_dim:]
         video_dynamics = zd
                                
         total_loss = 0
@@ -230,21 +230,21 @@ class DiCoMOGANCLIP(pl.LightningModule):
         beta_vae_loss = 0
         G_loss = 0
 
-        x_reconT = self.bVAE_dec(torch.cat((zT, video_content, video_dynamics), 1)) # T*B x C x H/2 x W/2
-        x_recon = self.bVAE_dec(torch.cat((video_style, video_content, video_dynamics), 1)) # T*B x C x H/2 x W/2
+        #x_reconT = self.bVAE_dec(torch.cat((zT, video_content, video_dynamics), 1)) # T*B x C x H/2 x W/2
+        #x_recon = self.bVAE_dec(torch.cat((video_style, video_content, video_dynamics), 1)) # T*B x C x H/2 x W/2
 
-        recon_loss = self.reconstruction_loss(vid_rs, x_recon, 'bernoulli')
-        recon_lossT = self.reconstruction_loss(vid_rs, x_reconT, 'bernoulli')
-        self.log("train/recon_loss", recon_loss, prog_bar=True, logger=True, on_step=True, on_epoch=False)
-        self.log("train/recon_lossT", recon_lossT, prog_bar=False, logger=True, on_step=True, on_epoch=False)
+        #recon_loss = self.reconstruction_loss(vid_rs, x_recon, 'bernoulli')
+        #recon_lossT = self.reconstruction_loss(vid_rs, x_reconT, 'bernoulli')
+        #self.log("train/recon_loss", recon_loss, prog_bar=True, logger=True, on_step=True, on_epoch=False)
+        #self.log("train/recon_lossT", recon_lossT, prog_bar=False, logger=True, on_step=True, on_epoch=False)
 
         # kl_loss_d = self.beta * self.kl_divergence(*mu_logvar_d)
-        kl_loss_s = self.beta * self.kl_divergence(*mu_logvar_s)
-        kl_loss = kl_loss_s # +  kl_loss_d
-        self.log("train/kl_loss", kl_loss, prog_bar=True, logger=True, on_step=True, on_epoch=False)
+        #kl_loss_s = self.beta * self.kl_divergence(*mu_logvar_s)
+        #kl_loss = kl_loss_s # +  kl_loss_d
+        #self.log("train/kl_loss", kl_loss, prog_bar=True, logger=True, on_step=True, on_epoch=False)
 
-        beta_vae_loss = 0.5 * (recon_loss + recon_lossT) +  kl_loss
-        self.log("train/beta_vae_loss", self.lambda_bvae * beta_vae_loss, prog_bar=False, logger=True, on_step=True, on_epoch=False)
+        #beta_vae_loss = 0.5 * (recon_loss + recon_lossT) +  kl_loss
+        #self.log("train/beta_vae_loss", self.lambda_bvae * beta_vae_loss, prog_bar=False, logger=True, on_step=True, on_epoch=False)
 
 
         # Generator loss
@@ -257,14 +257,14 @@ class DiCoMOGANCLIP(pl.LightningModule):
         
         # roll batch-wise
         txt_feat_mismatch, _ = self.preprocess_text_feat(txt_feat, mx_roll=2) # T*B x D2
-        text_video_style_mismatch, _ = self.preprocess_text_feat(text_video_style, mx_roll=2) # T*B x D2
+        #text_video_style_mismatch, _ = self.preprocess_text_feat(text_video_style, mx_roll=2) # T*B x D2
         
         # frame_rep = (latentw, video_style) # T*B x D1+D2
         # frame_rep_txt_mismatched = (latentw, text_video_style_mismatch) # T*B x D1+D2
         
         # frame rep (video_style, video_content, dynamics)
-        frame_rep = (txt_feat, video_content, video_dynamics) # T*B x D1+D2
-        frame_rep_txt_mismatched = (txt_feat_mismatch, video_content, video_dynamics) # T*B x D1+D2
+        frame_rep = (txt_feat, video_dynamics, None) # T*B x D1+D2
+        frame_rep_txt_mismatched = (txt_feat_mismatch, video_dynamics, None) # T*B x D1+D2
 
         # predict latents delta
         src_inversion = inversions_tf.mean(0, keepdims=True) # 1 x B x 18 x 512
@@ -324,7 +324,8 @@ class DiCoMOGANCLIP(pl.LightningModule):
         self.log("train/l2_latent_loss", self.l2_latent_lambda * latent_loss, prog_bar=True, logger=True, on_step=True, on_epoch=False)
         G_loss = self.rec_loss_lambda * reconstruction_loss + self.clip_loss_lambda * directional_clip_loss + self.l2_latent_lambda * latent_loss
         self.log("train/G_loss", G_loss, prog_bar=False, logger=True, on_step=True, on_epoch=False)
-        total_loss = self.lambda_bvae * beta_vae_loss + self.lambda_G * G_loss + self.lambda_vgg * vgg_loss + self.consistency_lambda * consistency_loss
+        #total_loss = self.lambda_bvae * beta_vae_loss + self.lambda_G * G_loss + self.lambda_vgg * vgg_loss + self.consistency_lambda * consistency_loss
+        total_loss = self.lambda_G * G_loss + self.lambda_vgg * vgg_loss + self.consistency_lambda * consistency_loss
         self.log("train/total_loss", total_loss, prog_bar=False, logger=True, on_step=True, on_epoch=False)
         return total_loss
 
@@ -378,11 +379,11 @@ class DiCoMOGANCLIP(pl.LightningModule):
         txt_feat = self.clip_encode_text(input_desc)  # B x D
 
         # vae encode text
-        muT, logvarT = self.text_enc(txt_feat) 
-        zT = self.reparametrize(muT, logvarT) # B x D'
-        zT = zT.unsqueeze(0).repeat(T, 1, 1)
-        zT = zT.contiguous().view(T*bs, -1)
-        text_video_style = zT
+        #muT, logvarT = self.text_enc(txt_feat) 
+        #zT = self.reparametrize(muT, logvarT) # B x D'
+        #zT = zT.unsqueeze(0).repeat(T, 1, 1)
+        #zT = zT.contiguous().view(T*bs, -1)
+        #text_video_style = zT
 
         # repeat text features 
         txt_feat_tf = txt_feat.unsqueeze(0).repeat(T, 1, 1) # T x B x D
@@ -390,9 +391,10 @@ class DiCoMOGANCLIP(pl.LightningModule):
         txt_feat.requires_grad = False
 
         # vae encode frames
-        zs, zd, mu_logvar_s, mu_logvar_d = self.bVAE_enc(vid_rs, ts)
-        video_style = zs[:, :self.vae_cond_dim]
-        video_content = zs[:, self.vae_cond_dim:]
+        #_, zd, _, _ = self.bVAE_enc(vid_rs, ts)
+        zd = self.bVAE_enc(vid_rs, ts)
+        #video_style = zs[:, :self.vae_cond_dim]
+        #video_content = zs[:, self.vae_cond_dim:]
         video_dynamics = zd
 
         # generate with mathching text
@@ -400,18 +402,18 @@ class DiCoMOGANCLIP(pl.LightningModule):
         
         # roll batch-wise
         mismatch_txt_feat, _ = self.preprocess_text_feat(txt_feat, mx_roll=2)
-        mismatched_video_style, _ = self.preprocess_text_feat(video_style, mx_roll=2)
+        #mismatched_video_style, _ = self.preprocess_text_feat(video_style, mx_roll=2)
 
         # print("zt", zT.shape)
         # print('cont', video_content.shape)
         # print("dy", video_dynamics.shape)
-        x_reconT = self.bVAE_dec(torch.cat((zT, video_content, video_dynamics), 1)) # T*B x C x H/2 x W/2
-        x_recon = self.bVAE_dec(torch.cat((video_style, video_content, video_dynamics), 1)) # T*B x C x H/2 x W/2
-        x_recon_mismatched = self.bVAE_dec(torch.cat((mismatched_video_style, video_content, video_dynamics), 1)) # T*B x C x H/2 x W/2
+        #x_reconT = self.bVAE_dec(torch.cat((zT, video_content, video_dynamics), 1)) # T*B x C x H/2 x W/2
+        #x_recon = self.bVAE_dec(torch.cat((video_style, video_content, video_dynamics), 1)) # T*B x C x H/2 x W/2
+        #x_recon_mismatched = self.bVAE_dec(torch.cat((mismatched_video_style, video_content, video_dynamics), 1)) # T*B x C x H/2 x W/2
 
-        # frame rep (video_style, video_content, dynamics)
-        frame_rep = (txt_feat, video_content, video_dynamics) # T*B x D1+D2
-        frame_rep_txt_mismatched = (mismatch_txt_feat, video_content, video_dynamics) # T*B x D1+D2
+        #frame rep (video_style, video_content, dynamics)
+        frame_rep = (txt_feat, video_dynamics, None) # T*B x D1+D2
+        frame_rep_txt_mismatched = (mismatch_txt_feat, video_dynamics, None) # T*B x D1+D2
 
         # frame_rep = (latentw, txt_feat) # T*B x D1+D2
         # frame_rep_txt_mismatched = (latentw, mismatch_txt_feat) # T*B x D1+D2
@@ -428,9 +430,9 @@ class DiCoMOGANCLIP(pl.LightningModule):
         ret['inverted_image'] = inverted_vid_norm 
         ret['real_image_caption'] = '\n'.join([f"Col_{i}: {el}" for i, el in enumerate(batch['raw_desc'])])
         
-        ret['x_recon_vae_text'] = x_reconT * 2 - 1 # T*B x C x H x W
-        ret['x_recon_vae'] = x_recon * 2 - 1 # T*B x C x H x W
-        ret['vae_mismatched_video_style'] = x_recon_mismatched * 2 - 1 # T*B x C x H x W
+        #ret['x_recon_vae_text'] = x_reconT * 2 - 1 # T*B x C x H x W
+        #ret['x_recon_vae'] = x_recon * 2 - 1 # T*B x C x H x W
+        #ret['vae_mismatched_video_style'] = x_recon_mismatched * 2 - 1 # T*B x C x H x W
         ret['x_recon_gan']  = self.stylegan_G(w_latents)
         ret['x_mismatch_text']  = self.stylegan_G(w_latents_txt_mismatched)
 
@@ -472,11 +474,17 @@ class DiCoMOGANCLIP(pl.LightningModule):
 
     def configure_optimizers(self):
         lr = self.learning_rate
-        vae_params = list(self.bVAE_enc.parameters())+\
-                 list(self.bVAE_dec.parameters())+\
-                 list(self.text_enc.parameters())
+        #vae_params = list(self.bVAE_enc.parameters())
 
         #m_params = list(self.mapping.parameters())
+        
+        vae_params = list(self.bVAE_enc.z0_diffeq_solver.parameters()) +\
+            list(self.bVAE_enc.encoder_z0.parameters()) +\
+            list(self.bVAE_enc.diffeq_solver.parameters()) +\
+            list(self.bVAE_enc.lin.parameters()) +\
+            list(self.bVAE_enc.swapae_encoder.DownToSpatialCode.parameters()) +\
+            list(self.bVAE_enc.swapae_encoder.FromRGB.parameters()) +\
+            list(self.bVAE_enc.mu_gen_d.parameters())
 
         style_m_params = list(self.style_mapper.parameters())
         

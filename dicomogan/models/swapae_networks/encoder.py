@@ -74,7 +74,7 @@ class StyleGAN2ResnetEncoder(BaseNetwork):
                           activate=False, bias=True)
             )
         )
-
+        """
         self.DownToGlobalCode = nn.Sequential()
         for i in range(netE_num_downsampling_gl):
             idx_from_beginning = netE_num_downsampling_sp + i
@@ -93,7 +93,7 @@ class StyleGAN2ResnetEncoder(BaseNetwork):
                 EqualLinear(nchannels, global_code_ch)
             )
         )
-
+        """
     def nc(self, idx):
         nc = self.netE_nc_steepness ** (5 + idx)
         nc = nc * self.netE_scale_capacity
@@ -113,12 +113,12 @@ class StyleGAN2ResnetEncoder(BaseNetwork):
             feature = F.interpolate(
                 feature, size=(7, 7), mode='bilinear', align_corners=False)
 
-        x = self.DownToGlobalCode(midpoint)
-        x = x.mean(dim=(2, 3)) # global avg
-        gl = self.ToGlobalCode(x)
+        #x = self.DownToGlobalCode(midpoint)
+        #x = x.mean(dim=(2, 3)) # global avg
+        #gl = self.ToGlobalCode(x)
         sp = normalize(sp)
-        gl = normalize(gl)
-        if extract_features:
-            return sp, gl, feature
-        else:
-            return sp, gl
+        #gl = normalize(gl)
+        #if extract_features:
+        #    return sp, gl, feature
+        #else:
+        return sp, None
