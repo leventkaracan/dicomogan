@@ -14,17 +14,20 @@ fid = FrechetInceptionDistance(feature=2048, reset_real_features=False).cuda()
 
 # Assuming that all real images and all fake images are stored in folders
 path_to_real_images = "/scratch/users/abond19/datasets/aligned_fashion_dataset/"
-path_to_fake_images = "/kuacc/users/mali18/dicomogan/model_outputs/_no_rec_loss_after_fix2022-10-18T21-43-53/test/"
+path_to_fake_images = "/kuacc/users/abond19/datasets/model_generated_dataset/_w-vidode-irregualar-sampling2022-10-20T11-15-48/"
 
 dataset = MetricsDataset(path_to_real_images, path_to_fake_images)
 
 BATCH_SIZE = 1
 
-dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
+dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=5)
 
 for pair in tqdm(dataloader, total=len(dataset) // BATCH_SIZE):
     real = pair['real_image'].cuda()
     fake = pair['fake_image'].cuda()
+    
+    if real.shape[1] < 15 or fake.shape[1] < 15:
+        continue
 
     B, T, C, H, W = real.shape
     real = real.reshape(B * T, C, H, W)

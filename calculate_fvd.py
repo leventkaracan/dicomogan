@@ -13,7 +13,8 @@ from fvd.fvd_utils import *
 
 # Assuming that all real images and all fake images are stored in folders
 path_to_real_images = "/scratch/users/abond19/datasets/aligned_fashion_dataset/"
-path_to_fake_images = "/kuacc/users/mali18/dicomogan/model_outputs/_no_rec_loss_after_fix2022-10-18T21-43-53/test/"
+path_to_fake_images = "/kuacc/users/abond19/datasets/model_generated_dataset/_w-vidode-irregualar-sampling2022-10-20T11-15-48/"
+#path_to_fake_images = "/scratch/users/abond19/datasets/inverted_fashion_dataset/"
 
 dataset = MetricsDataset(path_to_real_images, path_to_fake_images)
 
@@ -27,7 +28,7 @@ fake_activations = []
 
 i3d = load_fvd_model(torch.device("cuda"))
 
-for pair in tqdm(dataloader, total=len(dataset) // BATCH_SIZE):
+for idx, pair in enumerate(tqdm(dataloader, total=len(dataset) // BATCH_SIZE)):
     real = pair['real_image'].numpy()
     fake = pair['fake_image'].numpy()
 

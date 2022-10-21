@@ -7,19 +7,22 @@ import os
 
 # Here, I assume that the real and fake images have been stored in .npy files, but we can easily change that if necessary
 class MetricsDataset(Dataset):
-    def __init__(self, path_to_real_images, path_to_fake_images):
+    def __init__(self, path_to_real_images, path_to_fake_images, transform=None):
         super().__init__()
 
         self.path_to_real_images = path_to_real_images
         self.path_to_fake_images = path_to_fake_images
 
         self.real_images, self.fake_images = self._load_dataset()
-
-        self.transform = transforms.ToTensor()
+        
+        if transform is None:
+            self.transform = transforms.ToTensor()
+        else:
+            self.transform = transform
 
 
     def _load_dataset(self):
-        folder_names = os.listdir(self.path_to_real_images)
+        folder_names = os.listdir(self.path_to_fake_images)
 
         real_images = []
         fake_images = []
@@ -36,7 +39,7 @@ class MetricsDataset(Dataset):
 
             fake_files = os.listdir(fake_folder_path)
 
-            for file in os.listdir(real_folder_path):
+            for file in fake_files:
                 if file[-4:] != ".png":
                     continue
 
@@ -54,14 +57,21 @@ class MetricsDataset(Dataset):
     def __getitem__(self, index):
         real_images = []
         fake_images = []
+        
+        try:
 
-        for image_path in self.real_images[index]:
-            img = (255 * self.transform(Image.open(image_path))).to(torch.uint8)
-            real_images.append(img)
+            for image_path in self.real_images[index]:
+                # Only needed currently
+                image_path = image_path[:-8] + image_path[-7:]
+                img = (255 * self.transform(Image.open(image_path))).to(torch.uint8)
+                real_images.append(img)
 
-        for image_path in self.fake_images[index]:
-            img = (255 * self.transform(Image.open(image_path))).to(torch.uint8)
-            fake_images.append(img)
+            for image_path in self.fake_images[index]:
+                img = (255 * self.transform(Image.open(image_path))).to(torch.uint8)
+                fake_images.append(img)
+        except:
+            return torch.randn(1)
+            
         
         real_image = torch.stack(real_images)
         fake_image = torch.stack(fake_images)
@@ -74,4 +84,4 @@ class MetricsDataset(Dataset):
 
     # Assuming that real_images and fake_images have the same shape, which should be true if the fake_images are just reconstructions of the real_images
     def __len__(self):
-        return len(self.real_images)
+        return min(len(self.real_images), len(self.fake_images))
