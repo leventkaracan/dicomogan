@@ -23,8 +23,8 @@ class MFMOD(nn.Module):
     '''
     def __init__(self, modulation_shape):
         super().__init__()
-        self.blending_gamma = nn.Parameter(torch.zeros(*modulation_shape), requires_grad=True)
-        self.blending_beta = nn.Parameter(torch.zeros(*modulation_shape), requires_grad=True)
+        self.blending_gamma = nn.Parameter(torch.zeros(*modulation_shape) + 0.5, requires_grad=True)
+        self.blending_beta = nn.Parameter(torch.zeros(*modulation_shape) + 0.5, requires_grad=True)
 
     def forward(self, w1_gamma, w1_beta, w2_gamma, w2_beta):
         # B x n_layer x 512
