@@ -17,22 +17,18 @@ model:
     l2_latent_lambda : 1.0
     clip_loss_lambda : 1.0
     consistency_lambda : 0.1
+    lambda_dim_loss : 0.01
+    lambda_orth_loss : 0.2
     
     vae_cond_dim : 24 # must match text encoder latent_dim
     beta: 8
-
-    ODE_func_config:
-      target: dicomogan.modules.LatentODEfunc
-      params:
-        latent_dim : 32 # must match dynamic_latent_dim
-        nhidden : 256 
 
     video_ecnoder_config:
       target: dicomogan.new_modules.EncoderVideo_LatentODE
       params:
         img_size : [128,96] # must match video_decoder
-        static_latent_dim : 56
-        dynamic_latent_dim : 32 # must match ODE_func_config latent_dim
+        static_latent_dim : 64
+        dynamic_latent_dim : 64 # must match ODE_func_config latent_dim
         hid_channels : 32 
         kernel_size : 4
         hidden_dim : 256
@@ -45,44 +41,45 @@ model:
       target: dicomogan.modules.Decoder
       params:
         img_size : [3,128,96] # must match video_encoder
-        latent_dim : 88 # should match static_latent_dim + dynamic_latent_dim
+        latent_dim : 128 # should match static_latent_dim + dynamic_latent_dim
 
-    text_encoder_config:
-      target: dicomogan.modules.TextEncoder
+    clip_projection_config:
+      target: dicomogan.new_modules.LinearSubspace
       params:
-        text_size : 512
-        latent_dim : 24 # must match vae_cond_enc
+        input_size : 512
+        out_dim : 64
 
     stylegan_gen_config:
       target: dicomogan.models.stylegan.StyleGAN2Generator
       params:
         pkl_file: /kuacc/users/abond19/VideoEditing/dicomogan/StyleGAN_Human/ckpts/stylegan_human_v2_1024.pkl
     
-    #mapping_config:
-    #  target: dicomogan.modules.MappingNetworkVAE
-    #  params:
-    #    input_dim : 64 # must match dynamic_latent + (static_latent - text_latent)
-    #    fsize : 256
+    dim_loss_config:
+      target: dicomogan.losses.dim_loss.DIMLoss
+      params:
+        n_units : 512
+        embed1_dim : 64
+        embed2_dim : 64 
 
     style_mapper_config:
       target: dicomogan.models.mapper.TripleAttributeMapper
       params:
         predict_delta: True
-        use_coarse_mapper: [True, True, True] # Since the coarse mapper only handles pose, we don't want to do any modulation
-        use_medium_mapper: [True, True, True]
+        use_coarse_mapper: [True, True, False] # Since the coarse mapper only handles pose, we don't want to do any modulation
+        use_medium_mapper: [True, True, False]
         use_fine_mapper: [True, True, False] 
         coarse_cut_flag: False 
         medium_cut_flag: False
         fine_cut_flag: False
         mod_shape : [[1, 4, 1], [1, 4, 1], [1, 10, 1]]
-        attr_vec_dims: [512, 32, 32]# much match W_cont + CLIP embedding
+        attr_vec_dims: [64, 64, 0] # much match W_cont + CLIP embedding
 
 
     
 data:
   target: main.DataModuleFromConfig
   params:
-    batch_size: 3 # MUST Match batch size in dataset
+    batch_size: 2 # MUST Match batch size in dataset
     num_workers: 10
     train:
       target: dicomogan.data.new_video.VideoDataFashion # Changed from data.video.VideoDataFashion to data.new_video.VideoDataFashion
@@ -94,7 +91,7 @@ data:
         skip_frames : 5
         n_sampled_frames : 6
         irregular_sampling : True
-        batch_size : 3 #MUST match batch size 
+        batch_size : 2 #MUST match batch size 
         # crop : [512, 384]
         size : [256, 192]
         # attribute : "Color"
@@ -110,7 +107,7 @@ data:
         skip_frames : 5
         n_sampled_frames : 6
         irregular_sampling : False
-        batch_size : 3 #MUST match batch size 
+        batch_size : 2 #MUST match batch size 
         # crop : [512, 384]
         size : [256, 192]
         # attribute : "Color"

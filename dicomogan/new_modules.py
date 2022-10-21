@@ -6,6 +6,7 @@ import lib.utils as utils
 from torchdiffeq import odeint as odeint
 from dicomogan.vidode import Encoder, Encoder_z0_ODE_ConvGRU, create_convnet, ODEFunc, DiffeqSolver
 from dicomogan.models.swapae_networks.encoder import StyleGAN2ResnetEncoder
+import torch.nn.functional as F
 # from torchdiffeq import odeint_adjoint as odeint
 
 # def kaiming_init(m):
@@ -179,3 +180,26 @@ class EncoderVideo_LatentODE(nn.Module):
         zs = zs.unsqueeze(0).repeat(T, 1, 1).view(T * batch_size, -1)
 
         return zs, zdt, (mus, logvars), (None, None)
+
+
+
+class LinearSubspace(torch.nn.Module):
+    def __init__(self, out_dim, input_size=512):
+        super(LinearSubspace, self).__init__()
+        self.input_size = input_size
+        self.out_dim = out_dim
+        self.W = torch.nn.Parameter(torch.randn(self.out_dim, self.input_size), requires_grad=True)
+        torch.nn.init.orthogonal_(self.W)
+
+
+    def forward(self, embed, weight=None):
+        # embed : . x . x D 
+        if weight is None:
+            weight = self.W
+        out = F.linear(embed, weight)
+        out = out / out.norm(dim=-1, keepdim=True)
+        return out 
+
+
+    def _weight_norm(self, device):
+        return torch.norm(torch.eye(self.out_dim).to(device) - self.W @ self.W.t())

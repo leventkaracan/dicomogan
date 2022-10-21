@@ -27,13 +27,14 @@ class DiCoMOGANCLIP(pl.LightningModule):
     def __init__(self,
                     vae_cond_dim,
                     beta,
-                    ODE_func_config, 
                     video_ecnoder_config,
                     video_decoder_config,
-                    text_encoder_config,
+                    clip_projection_config,
                     style_mapper_config,
                     stylegan_gen_config,
-                    #mapping_config,
+                    dim_loss_config,
+                    lambda_dim_loss,
+                    lambda_orth_loss,
                     lambda_vgg,
                     lambda_G,
                     lambda_bvae,
@@ -64,6 +65,8 @@ class DiCoMOGANCLIP(pl.LightningModule):
         self.lambda_vgg = lambda_vgg
         self.lambda_G = lambda_G
         self.lambda_bvae = lambda_bvae
+        self.lambda_dim_loss = lambda_dim_loss
+        self.lambda_orth_loss = lambda_orth_loss
         self.rec_loss_lambda = rec_loss_lambda
         self.l2_latent_lambda = l2_latent_lambda
         self.clip_loss_lambda = clip_loss_lambda
@@ -78,7 +81,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         # initialize model
         self.bVAE_enc = instantiate_from_config(video_ecnoder_config) 
         self.bVAE_dec = instantiate_from_config(video_decoder_config)
-        self.text_enc = instantiate_from_config(text_encoder_config)
+        self.clip_projection = instantiate_from_config(clip_projection_config)
         #self.mapping = instantiate_from_config(mapping_config) 
         self.style_mapper = instantiate_from_config(style_mapper_config)
         self.stylegan_G = instantiate_from_config(stylegan_gen_config)
@@ -90,6 +93,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         self.rec_loss = nn.MSELoss()
         self.l2_latent_loss = nn.MSELoss()
         self.clip_loss = CLIPLoss()
+        self.dim_loss = instantiate_from_config(dim_loss_config)
 
         self.tgt_text_embed = None
         if tgt_text is not None:
@@ -196,91 +200,93 @@ class DiCoMOGANCLIP(pl.LightningModule):
         inversions_bf = batch['inversion'] # B, T x n_layers x D
         bs, T, n_channels, dim = inversions_bf.shape
         inversions_tf = inversions_bf.permute(1, 0, 2, 3)
-        # inversions = inversions_tf.contiguous().reshape(T * bs, n_channels, dim) # T * B x n_layers x D
-        # inversions.requires_grad = False
 
         # downsample res for vae TODO: experiment with downsampling the resolution much more
         vid_rs = nn.functional.interpolate(video_sample, scale_factor=0.5, mode="bicubic", align_corners=False, recompute_scale_factor=True) # T*B x C x H//2 x W//2 
         vid_rs_tf = vid_rs.view(T, bs, ch, int(height*0.5),int(width*0.5) )
         vid_rs_bf = vid_rs_tf.permute(1,0,2,3,4).contiguous() # B x T x C x H//2 x W//2
 
-        # encode text
-        txt_feat = self.clip_encode_text(input_desc)  # B x D
-
-        # vae encode text
-        muT, logvarT = self.text_enc(txt_feat) 
-        zT = self.reparametrize(muT, logvarT) # B x D'
-        zT = zT.unsqueeze(0).repeat(T, 1, 1)
-        zT = zT.contiguous().view(T*bs, -1)
-        text_video_style = zT
-
-        # repeat text features 
-        txt_feat_tf = txt_feat.unsqueeze(0).repeat(T, 1, 1) # T x B x D
-        txt_feat = txt_feat_tf.contiguous().view(T*bs, -1)  # T*B x D
-        txt_feat.requires_grad = False
-
         # vae encode frames
         zs, zd, mu_logvar_s, mu_logvar_d = self.bVAE_enc(vid_rs_bf, ts)
-        video_style = zs[:, :self.vae_cond_dim]
-        video_content = zs[:, self.vae_cond_dim:]
-        video_dynamics = zd
+        video_style = zs # T*B x D
+        video_dynamics = zd # T*B x D 
                                
+        # encode text for directional loss
+        txt_feat = self.clip_encode_text(input_desc)  # B x D
+        txt_feat_tf = txt_feat.unsqueeze(0).repeat(T, 1, 1) # T x B x D
+        txt_feat_tb = txt_feat_tf.contiguous().view(T*bs, -1)  # T*B x D
+        txt_feat_tb.requires_grad = False
+
+        style_type = np.random.randint(2)
+        if style_type == 0:
+            # encode text
+            zC = self.clip_projection(txt_feat) # B x D'
+            zC = zC.unsqueeze(0).repeat(T, 1, 1) # T x B x D'
+            zC = zC.contiguous().view(T*bs, -1) # T*B x D'
+            clip_video_style = zC
+
+        elif style_type == 1:
+            # extract frame features
+            ind = np.random.randint(T)
+            frame_feat = self.clip_loss.encode_images(vid_tf[ind] * 2 - 1) # B x D
+            zC = self.clip_projection(frame_feat) # B x D'
+            zC = zC.unsqueeze(0).repeat(T, 1, 1) # T x B x D'
+            zC = zC.contiguous().view(T*bs, -1)  # T*B x D'
+            clip_video_style = zC
+
+
         total_loss = 0
         vgg_loss = 0 
         beta_vae_loss = 0
         G_loss = 0
 
-        x_reconT = self.bVAE_dec(torch.cat((zT, video_content, video_dynamics), 1)) # T*B x C x H/2 x W/2
-        x_recon = self.bVAE_dec(torch.cat((video_style, video_content, video_dynamics), 1)) # T*B x C x H/2 x W/2
+        x_reconC = self.bVAE_dec(torch.cat((clip_video_style, video_dynamics), 1)) # T*B x C x H/2 x W/2
+        x_recon = self.bVAE_dec(torch.cat((video_style, video_dynamics), 1)) # T*B x C x H/2 x W/2
 
         recon_loss = self.reconstruction_loss(vid_rs, x_recon, 'bernoulli')
-        recon_lossT = self.reconstruction_loss(vid_rs, x_reconT, 'bernoulli')
+        recon_lossC = self.reconstruction_loss(vid_rs, x_reconC, 'bernoulli')
         self.log("train/recon_loss", recon_loss, prog_bar=True, logger=True, on_step=True, on_epoch=False)
-        self.log("train/recon_lossT", recon_lossT, prog_bar=False, logger=True, on_step=True, on_epoch=False)
+        self.log("train/recon_lossC", recon_lossC, prog_bar=False, logger=True, on_step=True, on_epoch=False)
 
         # kl_loss_d = self.beta * self.kl_divergence(*mu_logvar_d)
         kl_loss_s = self.beta * self.kl_divergence(*mu_logvar_s)
         kl_loss = kl_loss_s # +  kl_loss_d
         self.log("train/kl_loss", kl_loss, prog_bar=True, logger=True, on_step=True, on_epoch=False)
 
-        beta_vae_loss = 0.5 * (recon_loss + recon_lossT) +  kl_loss
+        beta_vae_loss = 1/2 * (recon_loss + recon_lossC) +  kl_loss
         self.log("train/beta_vae_loss", self.lambda_bvae * beta_vae_loss, prog_bar=False, logger=True, on_step=True, on_epoch=False)
 
 
-        # Generator loss
-        # latentw = self.mapping(z_vid[:,self.vae_cond_dim:]) # T*B x D
-
-        # roll video-wise
-        # reshaped_latentw = latentw.view(T, bs, -1).permute(1, 0, 2).contiguous()
-        # _,latentw_relevant = self.preprocess_latent_feat(reshaped_latentw) 
-        # latentw_relevant = latentw_relevant.permute(1, 0, 2).contiguous().view(T*bs, -1) # T*B x D1
-        
         # roll batch-wise
-        txt_feat_mismatch, _ = self.preprocess_text_feat(txt_feat, mx_roll=2) # T*B x D2
-        text_video_style_mismatch, _ = self.preprocess_text_feat(text_video_style, mx_roll=2) # T*B x D2
-        
-        # frame_rep = (latentw, video_style) # T*B x D1+D2
-        # frame_rep_txt_mismatched = (latentw, text_video_style_mismatch) # T*B x D1+D2
+        clip_video_style_mismatch, _ = self.preprocess_text_feat(clip_video_style, mx_roll=2) # T*B x D2
+        # For directional loss
+        txt_feat_mismatch, _ = self.preprocess_text_feat(txt_feat_tb, mx_roll=2) # T*B x D2
         
         # frame rep (video_style, video_content, dynamics)
-        frame_rep = (txt_feat, video_content, video_dynamics) # T*B x D1+D2
-        frame_rep_txt_mismatched = (txt_feat_mismatch, video_content, video_dynamics) # T*B x D1+D2
+        frame_rep_style = (video_style, video_dynamics, None) # T*B x D1+D2
+        frame_rep_clip = (clip_video_style, video_dynamics, None) # T*B x D1+D2
+        frame_rep_clip_mismatched = (clip_video_style_mismatch, video_dynamics, None) # T*B x D1+D2
 
         # predict latents delta
         src_inversion = inversions_tf.mean(0, keepdims=True) # 1 x B x 18 x 512
         src_inversion_tf = src_inversion.repeat(T, 1, 1, 1)
         src_inversion = src_inversion_tf.reshape(T*bs, n_channels, dim)
-        w_latents = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, *frame_rep)
-        w_latents_txt_mismatched = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, *frame_rep_txt_mismatched)
+
+        w_latents = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, *frame_rep_style)
+        w_latents_clip = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, *frame_rep_clip)
+        w_latents_clip_mismatched = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, *frame_rep_clip_mismatched)
 
         reconstruction = self.stylegan_G(w_latents) # T*B x 3 x H x W
-        imgs_txt_mismatched = self.stylegan_G(w_latents_txt_mismatched) # T*B x 3 x H x W
+        reconstruction_clip = self.stylegan_G(w_latents_clip) # T*B x 3 x H x W
+        imgs_clip_mismatched = self.stylegan_G(w_latents_clip_mismatched) # T*B x 3 x H x W
 
         reconstruction_inp_res = nn.functional.interpolate(reconstruction, size=(256, 192), mode="bicubic", align_corners=False)
-        imgs_txt_mismatched_inp_res = nn.functional.interpolate(imgs_txt_mismatched, size=(256, 192), mode="bicubic", align_corners=False)
+        reconstruction_clip_inp_res = nn.functional.interpolate(reconstruction_clip, size=(256, 192), mode="bicubic", align_corners=False)
+        imgs_clip_mismatched_inp_res = nn.functional.interpolate(imgs_clip_mismatched, size=(256, 192), mode="bicubic", align_corners=False)
 
 
         reconstruction_loss = self.rec_loss(reconstruction_inp_res, video_sample_norm)
+        clip_reconstruction_loss = self.rec_loss(reconstruction_clip_inp_res, video_sample_norm)
 
 
         # latent_loss = self.l2_latent_loss(src_inversion, w_latents) 
@@ -288,9 +294,12 @@ class DiCoMOGANCLIP(pl.LightningModule):
 
         # TODO: experiment with Hinge loss
         latent_loss = torch.maximum(self.l2_latent_loss(src_inversion, w_latents) - self.l2_latent_eps / 2, torch.zeros(1).to(src_inversion.device)[0]) 
-        latent_loss += torch.maximum(self.l2_latent_loss(src_inversion, w_latents_txt_mismatched) - self.l2_latent_eps, torch.zeros(1).to(src_inversion.device)[0])
-        vgg_loss = self.criterionVGG(reconstruction_inp_res / 2 + 0.5, video_sample)
+        latent_loss += torch.maximum(self.l2_latent_loss(src_inversion, w_latents_clip) - self.l2_latent_eps / 2, torch.zeros(1).to(src_inversion.device)[0]) 
+        latent_loss += torch.maximum(self.l2_latent_loss(src_inversion, w_latents_clip_mismatched) - self.l2_latent_eps, torch.zeros(1).to(src_inversion.device)[0])
+        vgg_loss = 0.5 * (self.criterionVGG(reconstruction_inp_res / 2 + 0.5, video_sample) + self.criterionVGG(reconstruction_clip_inp_res / 2 + 0.5, video_sample))
         
+        dim_loss = self.dim_loss(video_style[:bs], clip_video_style[:bs])
+        weight_norm_loss = self.clip_projection._weight_norm(self.device)
         
         # video based losses
         txt_feat_bf = txt_feat_tf.permute(1, 0, 2).contiguous() # B x T x D
@@ -303,10 +312,13 @@ class DiCoMOGANCLIP(pl.LightningModule):
         reconstruction_tf = reconstruction.contiguous().reshape(T, bs, reconstruction.shape[1], reconstruction.shape[2], reconstruction.shape[3])
         reconstruction_bf = reconstruction_tf.permute(1, 0, 2, 3, 4).contiguous()  # B x T x C x H x W 
 
-        imgs_txt_mismatched_tf = imgs_txt_mismatched.contiguous().reshape(T, bs, imgs_txt_mismatched.shape[1], imgs_txt_mismatched.shape[2], imgs_txt_mismatched.shape[3])
-        imgs_txt_mismatched_bf = imgs_txt_mismatched_tf.permute(1, 0, 2, 3, 4).contiguous()   # B x T x C x H W 
+        clip_reconstruction_tf = reconstruction_clip.contiguous().reshape(T, bs, reconstruction_clip.shape[1], reconstruction_clip.shape[2], reconstruction_clip.shape[3])
+        clip_reconstruction_bf = clip_reconstruction_tf.permute(1, 0, 2, 3, 4).contiguous()  # B x T x C x H x W 
 
-        imgs_txt_mismatched_inp_res_tf = imgs_txt_mismatched_inp_res.contiguous().reshape(T, bs, imgs_txt_mismatched_inp_res.shape[1], imgs_txt_mismatched_inp_res.shape[2], imgs_txt_mismatched_inp_res.shape[3])
+        imgs_clip_mismatched_tf = imgs_clip_mismatched.contiguous().reshape(T, bs, imgs_clip_mismatched.shape[1], imgs_clip_mismatched.shape[2], imgs_clip_mismatched.shape[3])
+        imgs_clip_mismatched_bf = imgs_clip_mismatched_tf.permute(1, 0, 2, 3, 4).contiguous()   # B x T x C x H W 
+
+        imgs_txt_mismatched_inp_res_tf = imgs_clip_mismatched_inp_res.contiguous().reshape(T, bs, imgs_clip_mismatched_inp_res.shape[1], imgs_clip_mismatched_inp_res.shape[2], imgs_clip_mismatched_inp_res.shape[3])
         imgs_txt_mismatched_inp_res_bf = imgs_txt_mismatched_inp_res_tf.permute(1, 0, 2, 3, 4).contiguous()   # B x T x C x H W 
 
         # directional loss
@@ -315,16 +327,21 @@ class DiCoMOGANCLIP(pl.LightningModule):
         # consistency loss
         consistency_loss = 0
         consistency_loss = self.clip_loss.consistency_loss(reconstruction_bf)
-        consistency_loss += self.clip_loss.consistency_loss(imgs_txt_mismatched_bf)
+        consistency_loss += self.clip_loss.consistency_loss(clip_reconstruction_bf)
+        consistency_loss += self.clip_loss.consistency_loss(imgs_clip_mismatched_bf)
 
+        self.log("train/orth_loss", self.lambda_orth_loss * weight_norm_loss, prog_bar=False, logger=True, on_step=True, on_epoch=False)
+        self.log("train/dim_loss", self.lambda_dim_loss * dim_loss, prog_bar=False, logger=True, on_step=True, on_epoch=False)
         self.log("train/consistency_loss", consistency_loss, prog_bar=False, logger=True, on_step=True, on_epoch=False)
         self.log("train/vgg_loss", vgg_loss, prog_bar=False, logger=True, on_step=True, on_epoch=False)
         self.log("train/rl_loss", self.rec_loss_lambda * reconstruction_loss, prog_bar=True, logger=True, on_step=True, on_epoch=False)
+        self.log("train/clip_rl_loss", self.rec_loss_lambda * clip_reconstruction_loss, prog_bar=True, logger=True, on_step=True, on_epoch=False)
         self.log("train/clip_loss",  self.clip_loss_lambda *  directional_clip_loss, prog_bar=True, logger=True, on_step=True, on_epoch=False)
         self.log("train/l2_latent_loss", self.l2_latent_lambda * latent_loss, prog_bar=True, logger=True, on_step=True, on_epoch=False)
-        G_loss = self.rec_loss_lambda * reconstruction_loss + self.clip_loss_lambda * directional_clip_loss + self.l2_latent_lambda * latent_loss
+        G_loss = self.rec_loss_lambda * 0.5 * (reconstruction_loss + clip_reconstruction_loss) + self.clip_loss_lambda * directional_clip_loss + self.l2_latent_lambda * latent_loss
         self.log("train/G_loss", G_loss, prog_bar=False, logger=True, on_step=True, on_epoch=False)
-        total_loss = self.lambda_bvae * beta_vae_loss + self.lambda_G * G_loss + self.lambda_vgg * vgg_loss + self.consistency_lambda * consistency_loss
+        total_loss = self.lambda_bvae * beta_vae_loss + self.lambda_G * G_loss + self.lambda_vgg * vgg_loss + \
+                    self.consistency_lambda * consistency_loss + self.lambda_dim_loss * dim_loss + self.lambda_orth_loss * weight_norm_loss
         self.log("train/total_loss", total_loss, prog_bar=False, logger=True, on_step=True, on_epoch=False)
         return total_loss
 
@@ -376,66 +393,82 @@ class DiCoMOGANCLIP(pl.LightningModule):
 
         # encode text
         txt_feat = self.clip_encode_text(input_desc)  # B x D
-
-        # vae encode text
-        muT, logvarT = self.text_enc(txt_feat) 
-        zT = self.reparametrize(muT, logvarT) # B x D'
+        zT = self.clip_projection(txt_feat) 
         zT = zT.unsqueeze(0).repeat(T, 1, 1)
         zT = zT.contiguous().view(T*bs, -1)
         text_video_style = zT
 
-        # repeat text features 
-        txt_feat_tf = txt_feat.unsqueeze(0).repeat(T, 1, 1) # T x B x D
-        txt_feat = txt_feat_tf.contiguous().view(T*bs, -1)  # T*B x D
-        txt_feat.requires_grad = False
+        # extract frame features
+        ind = np.random.randint(T)
+        frame_feat = self.clip_loss.encode_images(vid_tf[ind] * 2 - 1) # B x D
+        zF = self.clip_projection(frame_feat) 
+        zF = zF.unsqueeze(0).repeat(T, 1, 1)
+        zF = zF.contiguous().view(T*bs, -1)
+        frame_video_style = zF
+
 
         # vae encode frames
         zs, zd, mu_logvar_s, mu_logvar_d = self.bVAE_enc(vid_rs, ts)
-        video_style = zs[:, :self.vae_cond_dim]
-        video_content = zs[:, self.vae_cond_dim:]
+        video_style = zs
         video_dynamics = zd
 
         # generate with mathching text
         # latentw = self.mapping(z_vid[:,self.vae_cond_dim:])
         
         # roll batch-wise
-        mismatch_txt_feat, _ = self.preprocess_text_feat(txt_feat, mx_roll=2)
-        mismatched_video_style, _ = self.preprocess_text_feat(video_style, mx_roll=2)
+        text_video_style_mismatch, _ = self.preprocess_text_feat(text_video_style, mx_roll=2) # T*B x D2
+        frame_video_style_mismatch, _ = self.preprocess_text_feat(frame_video_style, mx_roll=2) # T*B x D2
 
         # print("zt", zT.shape)
         # print('cont', video_content.shape)
         # print("dy", video_dynamics.shape)
-        x_reconT = self.bVAE_dec(torch.cat((zT, video_content, video_dynamics), 1)) # T*B x C x H/2 x W/2
-        x_recon = self.bVAE_dec(torch.cat((video_style, video_content, video_dynamics), 1)) # T*B x C x H/2 x W/2
-        x_recon_mismatched = self.bVAE_dec(torch.cat((mismatched_video_style, video_content, video_dynamics), 1)) # T*B x C x H/2 x W/2
+        x_reconF = self.bVAE_dec(torch.cat((frame_video_style, video_dynamics), 1)) # T*B x C x H/2 x W/2
+        x_reconT = self.bVAE_dec(torch.cat((text_video_style, video_dynamics), 1)) # T*B x C x H/2 x W/2
+        x_recon = self.bVAE_dec(torch.cat((video_style, video_dynamics), 1)) # T*B x C x H/2 x W/2
+        x_recon_mismatchedT = self.bVAE_dec(torch.cat((text_video_style_mismatch, video_dynamics), 1)) # T*B x C x H/2 x W/2
+        x_recon_mismatchedF = self.bVAE_dec(torch.cat((frame_video_style_mismatch, video_dynamics), 1)) # T*B x C x H/2 x W/2
+
 
         # frame rep (video_style, video_content, dynamics)
-        frame_rep = (txt_feat, video_content, video_dynamics) # T*B x D1+D2
-        frame_rep_txt_mismatched = (mismatch_txt_feat, video_content, video_dynamics) # T*B x D1+D2
-
-        # frame_rep = (latentw, txt_feat) # T*B x D1+D2
-        # frame_rep_txt_mismatched = (latentw, mismatch_txt_feat) # T*B x D1+D2
-        
+        frame_rep_style = (video_style, video_dynamics, None) # T*B x D1+D2
+        frame_rep_txt= (text_video_style, video_dynamics, None) # T*B x D1+D2
+        frame_rep_frame= (frame_video_style, video_dynamics, None) # T*B x D1+D2
+        frame_rep_txt_mismatched = (text_video_style_mismatch, video_dynamics, None) # T*B x D1+D2
+        frame_rep_frame_mismatched = (frame_video_style_mismatch, video_dynamics, None) # T*B x D1+D2
 
         # predict latents delta
         src_inversion = inversions_tf.mean(0, keepdims=True) # 1 x B x 18 x 512
         src_inversion_tf = src_inversion.repeat(T, 1, 1, 1)
         src_inversion = src_inversion_tf.reshape(T*bs, n_channels, dim)
-        w_latents = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, *frame_rep)
+
+        w_latents = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, *frame_rep_style)
+        w_latents_txt = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, *frame_rep_txt)
+        w_latents_frame = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, *frame_rep_frame)
         w_latents_txt_mismatched = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, *frame_rep_txt_mismatched)
+        w_latents_frame_mismatched = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, *frame_rep_frame_mismatched)
+
+        reconstruction = self.stylegan_G(w_latents) # T*B x 3 x H x W
+        reconstruction_txt = self.stylegan_G(w_latents_txt) # T*B x 3 x H x W
+        reconstruction_frame = self.stylegan_G(w_latents_frame) # T*B x 3 x H x W
+        imgs_txt_mismatched = self.stylegan_G(w_latents_txt_mismatched) # T*B x 3 x H x W
+        imgs_frame_mismatched = self.stylegan_G(w_latents_frame_mismatched) # T*B x 3 x H x W
+
 
         ret['real_image'] = video_sample_norm 
         ret['inverted_image'] = inverted_vid_norm 
         ret['real_image_caption'] = '\n'.join([f"Col_{i}: {el}" for i, el in enumerate(batch['raw_desc'])])
         
         ret['x_recon_vae_text'] = x_reconT * 2 - 1 # T*B x C x H x W
+        ret['x_recon_vae_frame'] = x_reconF * 2 - 1 # T*B x C x H x W
         ret['x_recon_vae'] = x_recon * 2 - 1 # T*B x C x H x W
-        ret['vae_mismatched_video_style'] = x_recon_mismatched * 2 - 1 # T*B x C x H x W
-        ret['x_recon_gan']  = self.stylegan_G(w_latents)
-        ret['x_mismatch_text']  = self.stylegan_G(w_latents_txt_mismatched)
+        ret['vae_mismatched_text_video_style'] = x_recon_mismatchedT * 2 - 1 # T*B x C x H x W
+        ret['vae_mismatched_frame_video_style'] = x_recon_mismatchedF * 2 - 1 # T*B x C x H x W
 
-        ret['x_recon_gan'] = nn.functional.interpolate(ret['x_recon_gan'], size=self.frame_log_size, mode="bicubic", align_corners=False)
-        ret['x_mismatch_text'] = nn.functional.interpolate(ret['x_mismatch_text'], size=self.frame_log_size, mode="bicubic", align_corners=False)
+        ret['x_recon_gan'] = nn.functional.interpolate(reconstruction, size=self.frame_log_size, mode="bicubic", align_corners=False)
+        ret['x_recon_gan_text'] = nn.functional.interpolate(reconstruction_txt, size=self.frame_log_size, mode="bicubic", align_corners=False)
+        ret['x_recon_gan_frame'] = nn.functional.interpolate(reconstruction_frame, size=self.frame_log_size, mode="bicubic", align_corners=False)
+        ret['x_mismatch_text'] = nn.functional.interpolate(imgs_txt_mismatched, size=self.frame_log_size, mode="bicubic", align_corners=False)
+        ret['x_mismatch_frame'] = nn.functional.interpolate(imgs_frame_mismatched, size=self.frame_log_size, mode="bicubic", align_corners=False)
 
         if split == 'val':
             C, H, W = ret['real_image'].shape[1:]
@@ -473,13 +506,16 @@ class DiCoMOGANCLIP(pl.LightningModule):
     def configure_optimizers(self):
         lr = self.learning_rate
         vae_params = list(self.bVAE_enc.parameters())+\
-                 list(self.bVAE_dec.parameters())+\
-                 list(self.text_enc.parameters())
+                 list(self.bVAE_dec.parameters())
 
         #m_params = list(self.mapping.parameters())
 
-        style_m_params = list(self.style_mapper.parameters())
+        style_m_params = list(self.style_mapper.parameters())+\
+                        list(self.clip_projection.parameters())+\
+                        list(self.dim_loss.parameters())
         
+
+
         opt_vae = torch.optim.Adam(vae_params,
                                   lr=lr * 5, 
                                   betas=(0.9, 0.999))
