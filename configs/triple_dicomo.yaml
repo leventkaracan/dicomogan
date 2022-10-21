@@ -24,7 +24,7 @@ model:
     ODE_func_config:
       target: dicomogan.modules.LatentODEfunc
       params:
-        latent_dim : 32 # must match dynamic_latent_dim
+        latent_dim : 512 # must match dynamic_latent_dim
         nhidden : 256 
 
     video_ecnoder_config:
@@ -32,7 +32,7 @@ model:
       params:
         img_size : [128,96] # must match video_decoder
         static_latent_dim : 56
-        dynamic_latent_dim : 32 # must match ODE_func_config latent_dim
+        dynamic_latent_dim : 512 # must match ODE_func_config latent_dim
         hid_channels : 32 
         kernel_size : 4
         hidden_dim : 256
@@ -46,7 +46,7 @@ model:
       target: dicomogan.modules.Decoder
       params:
         img_size : [3,128,96] # must match video_encoder
-        latent_dim : 88 # should match static_latent_dim + dynamic_latent_dim
+        latent_dim : 568 # should match static_latent_dim + dynamic_latent_dim
 
     text_encoder_config:
       target: dicomogan.modules.TextEncoder
@@ -76,7 +76,7 @@ model:
         medium_cut_flag: False
         fine_cut_flag: False
         mod_shape : [[1, 4, 1], [1, 4, 1], [1, 10, 1]]
-        attr_vec_dims: [512, 32, 32]# much match W_cont + CLIP embedding
+        attr_vec_dims: [512, 32, 512]# much match W_cont + CLIP embedding
 
 
     

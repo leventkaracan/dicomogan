@@ -13,14 +13,14 @@ from torchdiffeq import odeint as odeint
 
 
 def create_net(n_inputs, n_outputs, n_layers=1,
-               n_units=100, nonlinear=nn.Tanh):
-    layers = [nn.Linear(n_inputs, n_units)]
+               n_units=100, nonlinear=nn.Tanh, dtype=torch.float32):
+    layers = [nn.Linear(n_inputs, n_units, dtype=dtype)]
     for i in range(n_layers):
         layers.append(nonlinear())
-        layers.append(nn.Linear(n_units, n_units))
+        layers.append(nn.Linear(n_units, n_units, dtype=dtype))
     
     layers.append(nonlinear())
-    layers.append(nn.Linear(n_units, n_outputs))
+    layers.append(nn.Linear(n_units, n_outputs, dtype=dtype))
     return nn.Sequential(*layers)
 
 
@@ -63,7 +63,11 @@ class DiffeqSolver(nn.Module):
         
         pred_y = odeint(self.ode_func, first_point, time_steps_to_predict,
                         rtol=self.odeint_rtol, atol=self.odeint_atol, method=self.ode_method)
-        pred_y = pred_y.permute(1, 0, 2, 3, 4)  # => [b, t, c, h0, w0]
+        
+        if len(pred_y.shape) == 5:
+            pred_y = pred_y.permute(1, 0, 2, 3, 4)  # => [b, t, c, h0, w0]
+        else:
+            pred_y = pred_y.permute(1, 0, 2) # B x T x D
 
         
         return pred_y

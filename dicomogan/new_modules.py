@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import lib.utils as utils
 from torchdiffeq import odeint as odeint
-from dicomogan.vidode import Encoder, Encoder_z0_ODE_ConvGRU, create_convnet, ODEFunc, DiffeqSolver
+from dicomogan.vidode import Encoder, Encoder_z0_ODE_ConvGRU, create_convnet, ODEFunc, DiffeqSolver, create_net
 from dicomogan.models.swapae_networks.encoder import StyleGAN2ResnetEncoder
 # from torchdiffeq import odeint_adjoint as odeint
 
@@ -97,8 +97,8 @@ class EncoderVideo_LatentODE(nn.Module):
 
 
         ##### ODE Decoder
-        ode_func_netD = create_convnet(n_inputs=ode_dim,
-                                       n_outputs=base_dim,
+        ode_func_netD = create_net(n_inputs=self.dynamic_latent_dim,
+                                       n_outputs=self.dynamic_latent_dim,
                                        n_layers=num_conv_layers,
                                        n_units=base_dim // 2,
                                        dtype=torch.float64)
@@ -169,16 +169,21 @@ class EncoderVideo_LatentODE(nn.Module):
             mask = torch.ones(T, 1)
         mask = mask.unsqueeze(0).repeat(batch_size, 1, 1).to(xi.device) # B x T x 1
         zd0, _ = self.encoder_z0(input_tensor=xi, time_steps=t, mask=mask) # B x spatial_code_ch x H' x W'
+        
+        zd0 = zd0.view(batch_size, -1)
+        
+        zd0 = torch.relu(self.lin(zd0))
+        zd0 = self.mu_gen_d(zd0) # B x D
 
         # solve for the whole video
         zd0 = zd0.to(torch.float64)
-        zdt = self.diffeq_solver(zd0, t) # B x T x spatial_code_ch x H' x W'
-        zdt = zdt.to(torch.float32) # B x T x spatial_code_ch x H' x W'
-        zdt = zdt.permute(1, 0, 2, 3, 4).contiguous().view(batch_size * T, -1) # T * B x spatial_code_ch * H' * W'
-
+        zdt = self.diffeq_solver(zd0, t) # B x T x D
+        zdt = zdt.to(torch.float32) # B x T x D
+        #zdt = zdt.permute(1, 0, 2, 3, 4).contiguous().view(batch_size * T, -1) # T * B x spatial_code_ch * H' * W'
+        zdt = zdt.permute(1, 0, 2).contiguous().view(batch_size * T, -1)
         # reduce dim to dynamic dim 
-        zdt = torch.relu(self.lin(zdt))
-        zdt = self.mu_gen_d(zdt)  # T * B x D
+        #zdt = torch.relu(self.lin(zdt))
+        #zdt = self.mu_gen_d(zdt)  # T * B x D
 
         # Question: why using hs and not h_max? Isn't redundent? RIP
         # TODO: experiment with non stocastic sampling
