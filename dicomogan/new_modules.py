@@ -118,7 +118,7 @@ class EncoderVideo_LatentODE(nn.Module):
         self.mu_gen_d = nn.Linear(hidden_dim, self.dynamic_latent_dim)
 
         # Fully connected layers for mean and variance
-        self.mu_logvar_gen_s = nn.Linear(global_code_ch, self.static_latent_dim * 2)
+        self.mu_logvar_gen_s = nn.Linear(global_code_ch, self.static_latent_dim)
 
         # self.apply(kaiming_init)
 
@@ -132,8 +132,6 @@ class EncoderVideo_LatentODE(nn.Module):
         T = x.size(1)
 
         xi = x.permute(1, 0, 2, 3, 4).contiguous() # T x B x C x H x W
-
-
         xi = xi.reshape(T*batch_size, x.shape[2], x.shape[3], x.shape[4]) # T*B x C x H x W
         xi, xi_gl = self.swapae_encoder(xi) # xi: T*B x spatial_code_ch x H' x W', xi_gl: T*B x global_code_ch
         xi = xi.view(T, batch_size, xi.shape[1], xi.shape[2], xi.shape[3]) # T x B x D' x H' x W'
@@ -182,11 +180,8 @@ class EncoderVideo_LatentODE(nn.Module):
 
         # Question: why using hs and not h_max? Isn't redundent? RIP
         # TODO: experiment with non stocastic sampling
-        
         h_max = torch.max(xi_gl, dim=0)[0] # B x D'
-        mu_logvars = self.mu_logvar_gen_s(h_max) # B x 2 * D''
-        mus, logvars = mu_logvars.view(-1, self.static_latent_dim, 2).unbind(-1) # B x D'' 
-        zs = self.reparametrize(mus, logvars) # B x D ''
+        zs = self.mu_logvar_gen_s(h_max) # B x 2 * D''
         zs = zs.unsqueeze(0).repeat(T, 1, 1).view(T * batch_size, -1)
 
-        return zs, zdt, (mus, logvars), (None, None)
+        return zs, zdt, (None, None), (None, None)

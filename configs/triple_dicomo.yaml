@@ -18,14 +18,7 @@ model:
     clip_loss_lambda : 1.0
     consistency_lambda : 0.1
     
-    vae_cond_dim : 24 # must match text encoder latent_dim
     beta: 8
-
-    ODE_func_config:
-      target: dicomogan.modules.LatentODEfunc
-      params:
-        latent_dim : 32 # must match dynamic_latent_dim
-        nhidden : 256 
 
     video_ecnoder_config:
       target: dicomogan.new_modules.EncoderVideo_LatentODE
@@ -41,18 +34,6 @@ model:
         spatial_code_ch : 256
         global_code_ch : 512
         sampling_type: "Static"
-    
-    video_decoder_config:
-      target: dicomogan.modules.Decoder
-      params:
-        img_size : [3,128,96] # must match video_encoder
-        latent_dim : 88 # should match static_latent_dim + dynamic_latent_dim
-
-    text_encoder_config:
-      target: dicomogan.modules.TextEncoder
-      params:
-        text_size : 512
-        latent_dim : 24 # must match vae_cond_enc
 
     stylegan_gen_config:
       target: dicomogan.models.stylegan.StyleGAN2Generator
@@ -76,7 +57,7 @@ model:
         medium_cut_flag: False
         fine_cut_flag: False
         mod_shape : [[1, 4, 1], [1, 4, 1], [1, 10, 1]]
-        attr_vec_dims: [512, 32, 32]# much match W_cont + CLIP embedding
+        attr_vec_dims: [512, 56, 32]# much match W_cont + CLIP embedding
 
 
     
