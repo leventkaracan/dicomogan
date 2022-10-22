@@ -68,7 +68,8 @@ class EncoderVideo_LatentODE(nn.Module):
         ode_func_netE = create_convnet(n_inputs=ode_dim, # ode dim should be same as the encoder out dim
                                        n_outputs=base_dim,
                                        n_layers=num_conv_layers,
-                                       n_units=base_dim // 2)
+                                       n_units=base_dim // 2,
+                                       dtype=torch.float64)
         
         rec_ode_func = ODEFunc(input_dim=ode_dim,
                                latent_dim=base_dim,  # channels after encoder, & latent dimension
@@ -87,12 +88,12 @@ class EncoderVideo_LatentODE(nn.Module):
                                                  hidden_dim=spatial_code_ch,
                                                  kernel_size=(3, 3),
                                                  num_layers=num_GRU_layers,
-                                                 dtype=torch.cuda.FloatTensor, # TODO: fix later
                                                  batch_first=False, # RIP dodge
                                                  bias=True,
                                                  return_all_layers=True,
                                                  z0_diffeq_solver=self.z0_diffeq_solver,
-                                                 run_backwards=True)
+                                                 run_backwards=True,
+                                                 dtype=torch.float64)
 
 
 
@@ -114,11 +115,11 @@ class EncoderVideo_LatentODE(nn.Module):
                                           odeint_rtol=1e-3,
                                           odeint_atol=1e-4)
 
-        self.lin = nn.Linear(spatial_code_ch * (img_size[0] // resize) * (img_size[1] // resize), hidden_dim)
-        self.mu_gen_d = nn.Linear(hidden_dim, self.dynamic_latent_dim)
+        self.lin = nn.Linear(spatial_code_ch * (img_size[0] // resize) * (img_size[1] // resize), hidden_dim, dtype=torch.float64)
+        self.mu_gen_d = nn.Linear(hidden_dim, self.dynamic_latent_dim, dtype=torch.float64)
 
         # Fully connected layers for mean and variance
-        self.mu_logvar_gen_s = nn.Linear(global_code_ch, self.static_latent_dim)
+        self.mu_logvar_gen_s = nn.Linear(global_code_ch, self.static_latent_dim, dtype=torch.float64)
 
         # self.apply(kaiming_init)
 
@@ -149,7 +150,8 @@ class EncoderVideo_LatentODE(nn.Module):
 
 
 
-
+        xi = xi.to(torch.float64)
+        xi_gl = xi_gl.to(torch.float64)
         ##### ODE encoding
         mask = torch.zeros(T, 1) # TODO: make mask
         # TODO: differenciate between interp and exterp when sampling
@@ -165,13 +167,11 @@ class EncoderVideo_LatentODE(nn.Module):
             #mask[0, :] = 1
         elif self.sampling_type == "Static":
             mask = torch.ones(T, 1)
-        mask = mask.unsqueeze(0).repeat(batch_size, 1, 1).to(xi.device) # B x T x 1
-        zd0, _ = self.encoder_z0(input_tensor=xi, time_steps=t, mask=mask) # B x spatial_code_ch x H' x W'
+        mask = mask.unsqueeze(0).repeat(batch_size, 1, 1).to(xi.device).to(torch.float64) # B x T x 1
+        zd0, _ = self.encoder_z0(input_tensor=xi.to(torch.float64), time_steps=t, mask=mask) # B x spatial_code_ch x H' x W'
 
         # solve for the whole video
-        zd0 = zd0.to(torch.float64)
         zdt = self.diffeq_solver(zd0, t) # B x T x spatial_code_ch x H' x W'
-        zdt = zdt.to(torch.float32) # B x T x spatial_code_ch x H' x W'
         zdt = zdt.permute(1, 0, 2, 3, 4).contiguous().view(batch_size * T, -1) # T * B x spatial_code_ch * H' * W'
 
         # reduce dim to dynamic dim 
@@ -184,4 +184,4 @@ class EncoderVideo_LatentODE(nn.Module):
         zs = self.mu_logvar_gen_s(h_max) # B x 2 * D''
         zs = zs.unsqueeze(0).repeat(T, 1, 1).view(T * batch_size, -1)
 
-        return zs, zdt, (None, None), (None, None)
+        return zs.to(torch.float32), zdt.to(torch.float32), (None, None), (None, None)

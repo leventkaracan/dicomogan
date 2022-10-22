@@ -139,13 +139,15 @@ class ConvGRUCell(nn.Module):
                                     out_channels=2 * self.hidden_dim,  # for update_gate,reset_gate respectively
                                     kernel_size=kernel_size,
                                     padding=self.padding,
-                                    bias=self.bias)
+                                    bias=self.bias,
+                                    dtype=dtype)
         
         self.conv_can = nn.Conv2d(in_channels=input_dim + hidden_dim,
                                   out_channels=self.hidden_dim,  # for candidate neural memory
                                   kernel_size=kernel_size,
                                   padding=self.padding,
-                                  bias=self.bias)
+                                  bias=self.bias,
+                                  dtype=dtype)
     
     def init_hidden(self, batch_size):
         return (torch.zeros(batch_size, self.hidden_dim, self.height, self.width)).type(self.dtype)
@@ -220,9 +222,9 @@ class Encoder_z0_ODE_ConvGRU(nn.Module):
         self.z0_dim = hidden_dim[0]
         z = hidden_dim[0]
         self.transform_z0 = nn.Sequential(
-            nn.Conv2d(z, z, 1, 1, 0),
+            nn.Conv2d(z, z, 1, 1, 0, dtype=dtype),
             nn.ReLU(),
-            nn.Conv2d(z, z * 2, 1, 1, 0), )
+            nn.Conv2d(z, z * 2, 1, 1, 0, dtype=dtype), )
     
     def forward(self, input_tensor, time_steps, mask=None, tracker=None):
     
@@ -250,7 +252,7 @@ class Encoder_z0_ODE_ConvGRU(nn.Module):
         
         b, t, c, h, w = input_tensor.size()
         # Set initial inputs
-        prev_input_tensor = torch.zeros((b, c, h, w)).to(input_tensor.device)
+        prev_input_tensor = torch.zeros((b, c, h, w)).to(input_tensor.device).to(input_tensor.dtype)
         
         # Time configuration
         # Run ODE backwards and combine the y(t) estimates using gating

@@ -90,6 +90,9 @@ class CLIPLoss(pl.LightningModule):
             self.betas = np.linspace(projection_direction['beta_st'], projection_direction['beta_en'], projection_direction['steps'])
  
 
+    # def get_perceptual_loss(self, imgs1, imgs2):
+
+
     def get_text_features(self, texts:List, norm: bool = True) -> torch.Tensor:
         tokens = self.tokenize(texts)
         text_features = self.encode_text(tokens).detach()

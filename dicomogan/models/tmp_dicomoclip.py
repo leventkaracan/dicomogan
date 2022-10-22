@@ -33,8 +33,6 @@ class DiCoMOGANCLIP(pl.LightningModule):
                     stylegan_gen_config,
                     #mapping_config,
                     lambda_vgg,
-                    lambda_G,
-                    lambda_bvae,
                     rec_loss_lambda,
                     l2_latent_lambda,
                     clip_loss_lambda,
@@ -380,8 +378,8 @@ class DiCoMOGANCLIP(pl.LightningModule):
         ret['x_recon_gan']  = self.stylegan_G(w_latents)
         ret['x_mismatch_text']  = self.stylegan_G(w_latents_txt_mismatched)
 
-        ret['x_recon_gan'] = nn.functional.interpolate(ret['x_recon_gan'], size=self.frame_log_size, mode="bicubic", align_corners=False)
-        ret['x_mismatch_text'] = nn.functional.interpolate(ret['x_mismatch_text'], size=self.frame_log_size, mode="bicubic", align_corners=False)
+        ret['x_recon_gan'] = nn.functional.interpolate(ret['x_recon_gan'], size=self.frame_log_size, mode="nearest")
+        ret['x_mismatch_text'] = nn.functional.interpolate(ret['x_mismatch_text'], size=self.frame_log_size, mode="nearest")
 
         if split == 'val' and self.global_step > 0:
             C, H, W = ret['real_image'].shape[1:]

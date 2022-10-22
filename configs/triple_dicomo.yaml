@@ -9,17 +9,28 @@ model:
     # tgt_text : 'Yellow Dresses Made from polyester with V-neckline. The dress is all over ribbed and has front buttons and is short sleeves. The dress is regular fit'
     delta_inversion_weight : 0.1
     l2_latent_eps : 0.02
-
-    lambda_vgg: 5.0
-    lambda_G: 1
-    lambda_bvae: 1
-    rec_loss_lambda : 0.5
-    l2_latent_lambda : 1.0
-    clip_loss_lambda : 1.0
-    consistency_lambda : 0.1
-    
     beta: 8
 
+    lambda_vgg: 1.0
+    l2_latent_lambda : 1.0
+    clip_loss_lambda : 1.0
+
+    consistency_lambda:
+      target: dicomogan.models.utils.LambdaScheduler
+      params:
+        warm_up_steps: 20000
+        lr_min: 0.1
+        lr_max: 5.0
+        max_decay_steps: 75000
+
+    rec_loss_lambda:
+      target: dicomogan.models.utils.LambdaScheduler
+      params:
+        warm_up_steps: 25000
+        lr_min: 0.01
+        lr_max: 0.5
+        max_decay_steps: 75000
+    
     video_ecnoder_config:
       target: dicomogan.new_modules.EncoderVideo_LatentODE
       params:
