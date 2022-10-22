@@ -178,6 +178,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
     
     def training_step(self, batch, batch_idx):
         input_desc = batch['raw_desc'] # B
+        print(batch['video_name'])
 
         # videos reshape
         vid_bf = batch['real_img'] # B x T x C x H x W 
@@ -198,6 +199,12 @@ class DiCoMOGANCLIP(pl.LightningModule):
         inversions_tf = inversions_bf.permute(1, 0, 2, 3)
         # inversions = inversions_tf.contiguous().reshape(T * bs, n_channels, dim) # T * B x n_layers x D
         # inversions.requires_grad = False
+
+        inverted_vid_bf = batch['inverted_img'] # B x T x ch x H x W -- range [0, 1]
+        inverted_vid_tf = inverted_vid_bf.permute(1,0,2,3,4) # T x B x C x H x W 
+        inverted_vid = inverted_vid_tf.contiguous().view(T * bs, ch, height, width) # T*B x C x H x W 
+        inverted_vid_norm = inverted_vid * 2 - 1 # range [-1, 1] to pass to the generator and disc
+        
 
         # downsample res for vae TODO: experiment with downsampling the resolution much more
         vid_rs = nn.functional.interpolate(video_sample, scale_factor=0.5, mode="bicubic", align_corners=False, recompute_scale_factor=True) # T*B x C x H//2 x W//2 
@@ -280,7 +287,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         imgs_txt_mismatched_inp_res = nn.functional.interpolate(imgs_txt_mismatched, size=(256, 192), mode="bicubic", align_corners=False)
 
 
-        reconstruction_loss = self.rec_loss(reconstruction_inp_res, video_sample_norm)
+        reconstruction_loss = self.rec_loss(reconstruction_inp_res, inverted_vid_norm)
 
 
         # latent_loss = self.l2_latent_loss(src_inversion, w_latents) 
@@ -289,7 +296,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         # TODO: experiment with Hinge loss
         latent_loss = torch.maximum(self.l2_latent_loss(src_inversion, w_latents) - self.l2_latent_eps / 2, torch.zeros(1).to(src_inversion.device)[0]) 
         latent_loss += torch.maximum(self.l2_latent_loss(src_inversion, w_latents_txt_mismatched) - self.l2_latent_eps, torch.zeros(1).to(src_inversion.device)[0])
-        vgg_loss = self.criterionVGG(reconstruction_inp_res / 2 + 0.5, video_sample)
+        vgg_loss = self.criterionVGG(reconstruction_inp_res / 2 + 0.5, inverted_vid)
         
         
         # video based losses
@@ -426,7 +433,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
 
         ret['real_image'] = video_sample_norm 
         ret['inverted_image'] = inverted_vid_norm 
-        ret['real_image_caption'] = '\n'.join([f"Col_{i}: {el}" for i, el in enumerate(batch['raw_desc'])])
+        ret['real_image_caption'] = '\n'.join([f"{batch['video_name'][i]}: {el}" for i, el in enumerate(batch['raw_desc'])])
         
         ret['x_recon_vae_text'] = x_reconT * 2 - 1 # T*B x C x H x W
         ret['x_recon_vae'] = x_recon * 2 - 1 # T*B x C x H x W
