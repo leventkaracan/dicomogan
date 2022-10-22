@@ -206,7 +206,7 @@ class CLIPLoss(pl.LightningModule):
         return self.direction_loss(pos_direction, neg_direction).mean()
 
     
-    def consistency_loss(self, generated_images, num_samples=10):
+    def consistency_loss(self, generated_images, num_samples=3):
         # generated_images B x T x C x H x W
         num_samples = min(num_samples, generated_images.shape[1])
         indices = np.random.choice(generated_images.shape[1], size=num_samples, replace=False)

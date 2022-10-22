@@ -115,11 +115,11 @@ class EncoderVideo_LatentODE(nn.Module):
                                           odeint_rtol=1e-3,
                                           odeint_atol=1e-4)
 
-        self.lin = nn.Linear(spatial_code_ch * (img_size[0] // resize) * (img_size[1] // resize), hidden_dim, dtype=torch.float64)
-        self.mu_gen_d = nn.Linear(hidden_dim, self.dynamic_latent_dim, dtype=torch.float64)
+        self.lin = nn.Linear(spatial_code_ch * (img_size[0] // resize) * (img_size[1] // resize), hidden_dim)
+        self.mu_gen_d = nn.Linear(hidden_dim, self.dynamic_latent_dim)
 
         # Fully connected layers for mean and variance
-        self.mu_logvar_gen_s = nn.Linear(global_code_ch, self.static_latent_dim, dtype=torch.float64)
+        self.mu_logvar_gen_s = nn.Linear(global_code_ch, self.static_latent_dim)
 
         # self.apply(kaiming_init)
 
@@ -151,7 +151,6 @@ class EncoderVideo_LatentODE(nn.Module):
 
 
         xi = xi.to(torch.float64)
-        xi_gl = xi_gl.to(torch.float64)
         ##### ODE encoding
         mask = torch.zeros(T, 1) # TODO: make mask
         # TODO: differenciate between interp and exterp when sampling
@@ -174,6 +173,7 @@ class EncoderVideo_LatentODE(nn.Module):
         zdt = self.diffeq_solver(zd0, t) # B x T x spatial_code_ch x H' x W'
         zdt = zdt.permute(1, 0, 2, 3, 4).contiguous().view(batch_size * T, -1) # T * B x spatial_code_ch * H' * W'
 
+        zdt = zdt.to(torch.float32)
         # reduce dim to dynamic dim 
         zdt = torch.relu(self.lin(zdt))
         zdt = self.mu_gen_d(zdt)  # T * B x D
@@ -184,4 +184,4 @@ class EncoderVideo_LatentODE(nn.Module):
         zs = self.mu_logvar_gen_s(h_max) # B x 2 * D''
         zs = zs.unsqueeze(0).repeat(T, 1, 1).view(T * batch_size, -1)
 
-        return zs.to(torch.float32), zdt.to(torch.float32), (None, None), (None, None)
+        return zs, zdt, (None, None), (None, None)
