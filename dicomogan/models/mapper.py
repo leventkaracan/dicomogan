@@ -35,6 +35,60 @@ class MFMOD(nn.Module):
         bias = beta_alpha * w1_beta + (1 - beta_alpha) * w2_beta
         return factor, bias
 
+class SequentialModulationModule(nn.Module):
+    def __init__(self, attr_vec_dim1, attr_vec_dim2, attr_vec_dim3, layernum, mod_shape):
+        super(SequentialModulationModule, self).__init__()
+        self.layernum = layernum
+        self.fc = nn.Linear(512, 512)
+        self.initial_norm = nn.LayerNorm([self.layernum, 512], elementwise_affine=False)
+        self.attr_vec_dim1 = attr_vec_dim1
+        self.attr_vec_dim2 = attr_vec_dim2
+        self.attr_vec_dim3 = attr_vec_dim3
+
+        self.gamma_function_1 = nn.Sequential(nn.Linear(attr_vec_dim1, 512), nn.LayerNorm([512]), nn.LeakyReLU(), nn.Linear(512, 512))
+        self.beta_function_1 = nn.Sequential(nn.Linear(attr_vec_dim1, 512), nn.LayerNorm([512]), nn.LeakyReLU(), nn.Linear(512, 512))
+        
+        self.gamma_function_2 = nn.Sequential(nn.Linear(attr_vec_dim2, 512), nn.LayerNorm([512]), nn.LeakyReLU(), nn.Linear(512, 512))
+        self.beta_function_2 = nn.Sequential(nn.Linear(attr_vec_dim2, 512), nn.LayerNorm([512]), nn.LeakyReLU(), nn.Linear(512, 512))
+        
+        self.gamma_function_3 = nn.Sequential(nn.Linear(attr_vec_dim3, 512), nn.LayerNorm([512]), nn.LeakyReLU(), nn.Linear(512, 512))
+        self.beta_function_3 = nn.Sequential(nn.Linear(attr_vec_dim3, 512), nn.LayerNorm([512]), nn.LeakyReLU(), nn.Linear(512, 512))
+
+        self.inner_norm1 = nn.LayerNorm([self.layernum, 512], elementwise_affine=False)
+        self.inner_norm2 = nn.LayerNorm([self.layernum, 512], elementwise_affine=False)
+        
+        self.leakyrelu = nn.LeakyReLU()
+
+    def forward(self, x, attr_vec_1, attr_vec_2, attr_vec_3, cut_flag):
+        x = self.fc(x)
+        x = self.initial_norm(x)
+
+        if cut_flag:
+            return x
+
+        gamma_1 = torch.sigmoid(self.gamma_function_1(attr_vec_1.float()))
+        beta_1 = torch.sigmoid(self.beta_function_1(attr_vec_1.float()))
+
+        gamma_2 = torch.sigmoid(self.gamma_function_2(attr_vec_2.float()))
+        beta_2 = torch.sigmoid(self.beta_function_2(attr_vec_2.float()))
+
+        gamma_3 = torch.sigmoid(self.gamma_function_3(attr_vec_3.float()))
+        beta_3 = torch.sigmoid(self.beta_function_3(attr_vec_3.float()))
+
+        x = x * (1 + gamma_1) + beta_1
+        x = self.inner_norm1(x)
+        x = x * (1 + gamma_2) + beta_2
+        x = self.inner_norm2(x)
+        x = x * (1 + gamma_3) + beta_3
+
+        x = self.leakyrelu(x)
+
+        return x
+        
+
+
+
+
 class TripleMFModulationModule(nn.Module):
     def __init__(self, layernum, attr_vec_dim1, attr_vec_dim2, attr_vec_dim3, mod_shape):
         super(TripleMFModulationModule, self).__init__()
@@ -433,9 +487,9 @@ class AttributeMapperSubModule(nn.Module):
         self.mapper = None
         
         if sum(self.use_mapper * 1) == 3:
-            self.mapper = TripleAttributeMapperModule(self.attr_vec_dim[0], self.attr_vec_dim[1], self.attr_vec_dim[2], n_layer, mod_shape=mod_shape, modtype=modtype)
+            self.mapper = SequentialModulationModule(self.attr_vec_dim[0], self.attr_vec_dim[1], self.attr_vec_dim[2], n_layer, mod_shape=mod_shape)
         elif sum(self.use_mapper * 1) == 2:
-            self.mapper = DoubleAttributeMapperModule(self.attr_vec_dim[self.use_mapper][0], self.attr_vec_dim[self.use_mapper][1], n_layer, mod_shape=mod_shape, modtype=modtype)
+            self.mapper = DoubleAttributeMapperModule(self.attr_vec_dim[self.use_mapper][0], self.attr_vec_dim[self.use_mapper][1], n_layer, mod_shape=mod_shape)
         elif sum(self.use_mapper * 1) == 1:
             self.mapper = AttributeMapperModule(self.attr_vec_dim[self.use_mapper][0], n_layer)
             
@@ -480,9 +534,9 @@ class TripleAttributeMapper(nn.Module):
         self.attr_vec_dims = np.array(attr_vec_dims)
         self.predict_delta = predict_delta
         
-        self.coarse_mapping = AttributeMapperSubModule(self.attr_vec_dims, 4, self.use_coarse_mapper, self.coarse_cut_flag, mod_shape=mod_shape[0], modtype=modtype)
-        self.medium_mapping = AttributeMapperSubModule(self.attr_vec_dims, 4, self.use_medium_mapper, self.medium_cut_flag, mod_shape=mod_shape[1], modtype=modtype)
-        self.fine_mapping = AttributeMapperSubModule(self.attr_vec_dims, 10, self.use_fine_mapper, self.fine_cut_flag, mod_shape=mod_shape[2], modtype=modtype)
+        self.coarse_mapping = AttributeMapperSubModule(self.attr_vec_dims, 4, self.use_coarse_mapper, self.coarse_cut_flag, mod_shape=mod_shape[0])
+        self.medium_mapping = AttributeMapperSubModule(self.attr_vec_dims, 4, self.use_medium_mapper, self.medium_cut_flag, mod_shape=mod_shape[1])
+        self.fine_mapping = AttributeMapperSubModule(self.attr_vec_dims, 10, self.use_fine_mapper, self.fine_cut_flag, mod_shape=mod_shape[2])
     
     def forward(self, x, attribute_vector1, attribute_vector2, attribute_vector3):
         x_coarse = x[:, :4, :]
