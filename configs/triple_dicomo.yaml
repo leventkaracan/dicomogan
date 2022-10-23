@@ -13,15 +13,16 @@ model:
 
     lambda_vgg: 1.0
     l2_latent_lambda : 1.0
-    clip_loss_lambda : 1.0
+    clip_loss_lambda : 3.0
+    codebook_lambda : 1.0
 
     consistency_lambda:
       target: dicomogan.models.utils.LambdaScheduler
       params:
-        warm_up_steps: 20000
-        lr_min: 0.1
-        lr_max: 5.0
-        max_decay_steps: 75000
+        warm_up_steps: 0
+        lr_min: 0.01
+        lr_max: 2.0
+        max_decay_steps: 10000
 
     rec_loss_lambda:
       target: dicomogan.models.utils.LambdaScheduler
@@ -29,16 +30,14 @@ model:
         warm_up_steps: 25000
         lr_min: 0.01
         lr_max: 0.5
-        max_decay_steps: 75000
+        max_decay_steps: 10000
     
     video_ecnoder_config:
       target: dicomogan.new_modules.EncoderVideo_LatentODE
       params:
         img_size : [128,96] # must match video_decoder
-        static_latent_dim : 56
-        dynamic_latent_dim : 32 # must match ODE_func_config latent_dim
-        hid_channels : 32 
-        kernel_size : 4
+        static_latent_dim : 64
+        dynamic_latent_dim : 64 # must match ODE_func_config latent_dim
         hidden_dim : 256
         netE_num_downsampling_sp : 3
         netE_num_downsampling_gl : 1
@@ -50,6 +49,13 @@ model:
       target: dicomogan.models.stylegan.StyleGAN2Generator
       params:
         pkl_file: /kuacc/users/abond19/VideoEditing/dicomogan/StyleGAN_Human/ckpts/stylegan_human_v2_1024.pkl
+    
+    vqvae_config:
+      target: dicomogan.models.vqvae.VectorQuantizer2
+      params:
+        n_e : 512
+        e_dim : 256 
+        beta : 0.25
     
     #mapping_config:
     #  target: dicomogan.modules.MappingNetworkVAE
@@ -68,7 +74,7 @@ model:
         medium_cut_flag: False
         fine_cut_flag: False
         mod_shape : [[1, 4, 1], [1, 4, 1], [1, 10, 1]]
-        attr_vec_dims: [512, 56, 32]# much match W_cont + CLIP embedding
+        attr_vec_dims: [512, 64, 64]
 
 
     

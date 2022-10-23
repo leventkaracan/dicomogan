@@ -30,7 +30,7 @@ def reverse(tensor):
 
 
 class EncoderVideo_LatentODE(nn.Module):
-    def __init__(self, img_size, static_latent_dim=5, dynamic_latent_dim=1, hid_channels = 32, kernel_size = 4, hidden_dim = 256, use_last_gru_hidden=False,
+    def __init__(self, img_size, static_latent_dim=5, dynamic_latent_dim=1, hidden_dim = 256, use_last_gru_hidden=False,
                  bidirectional_gru=True, num_GRU_layers=1, num_encoder_layers=4, num_conv_layers=2, n_samples=100, 
                  netE_num_downsampling_sp=3, netE_num_downsampling_gl=1, spatial_code_ch=256, global_code_ch=512, sampling_type="Static"):
 
@@ -128,7 +128,7 @@ class EncoderVideo_LatentODE(nn.Module):
         eps = std.data.new(std.size()).normal_()
         return mu + std*eps
 
-    def forward(self, x, t): # x: B x T x C x H x W , t: (B x T)
+    def video_representation(self, x, t):
         batch_size = x.size(0)
         T = x.size(1)
 
@@ -137,6 +137,7 @@ class EncoderVideo_LatentODE(nn.Module):
         xi, xi_gl = self.swapae_encoder(xi) # xi: T*B x spatial_code_ch x H' x W', xi_gl: T*B x global_code_ch
         xi = xi.view(T, batch_size, xi.shape[1], xi.shape[2], xi.shape[3]) # T x B x D' x H' x W'
         xi_gl = xi_gl.view(T, batch_size, -1)  # T x B x D'
+        xi_gl = torch.max(xi_gl, dim=0)[0] # B x D'
 
 
         # all_xi, all_xi_gl = [], []
@@ -147,8 +148,6 @@ class EncoderVideo_LatentODE(nn.Module):
         
         # xi = torch.stack(all_xi, 0) # T x B x D' x H' x W'
         # xi_gl = torch.stack(all_xi_gl, 0) # T x B x D'
-
-
 
         xi = xi.to(torch.float64)
         ##### ODE encoding
@@ -168,6 +167,11 @@ class EncoderVideo_LatentODE(nn.Module):
             mask = torch.ones(T, 1)
         mask = mask.unsqueeze(0).repeat(batch_size, 1, 1).to(xi.device).to(torch.float64) # B x T x 1
         zd0, _ = self.encoder_z0(input_tensor=xi.to(torch.float64), time_steps=t, mask=mask) # B x spatial_code_ch x H' x W'
+        return xi_gl, zd0
+    
+    def frame_representation(self, h_max, zd0, t):
+        batch_size = h_max.size(0)
+        T = t.size(0)
 
         # solve for the whole video
         zdt = self.diffeq_solver(zd0, t) # B x T x spatial_code_ch x H' x W'
@@ -180,8 +184,11 @@ class EncoderVideo_LatentODE(nn.Module):
 
         # Question: why using hs and not h_max? Isn't redundent? RIP
         # TODO: experiment with non stocastic sampling
-        h_max = torch.max(xi_gl, dim=0)[0] # B x D'
         zs = self.mu_logvar_gen_s(h_max) # B x 2 * D''
         zs = zs.unsqueeze(0).repeat(T, 1, 1).view(T * batch_size, -1)
 
         return zs, zdt, (None, None), (None, None)
+
+    def forward(self, x, t): # x: B x T x C x H x W , t: (B x T)
+        z_static, z_dynamic = self.video_representation(x, t)
+        return self.frame_represetnation(z_static, z_dynamic, t)

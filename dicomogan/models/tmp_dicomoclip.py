@@ -1,3 +1,4 @@
+from re import I
 import pytorch_lightning as pl
 from experiments_utils import *
 import argparse
@@ -14,6 +15,7 @@ from dicomogan.losses.clip_loss import CLIPLoss
 from dicomogan.losses.lpips import LPIPS
 from dicomogan.losses.loss_lib import GANLoss, VGGLoss, HybridOptim
 from dicomogan.models.utils import ConstScheduler
+from dicomogan.models.vqvae import VectorQuantizer2 as VectorQuantizer
 import os
 from PIL import Image
 import random
@@ -37,8 +39,10 @@ class DiCoMOGANCLIP(pl.LightningModule):
                     l2_latent_lambda,
                     clip_loss_lambda,
                     consistency_lambda,
+                    codebook_lambda,
                     delta_inversion_weight,
                     l2_latent_eps,
+                    vqvae_config = None,
                     scheduler_config = None,
                     custom_loggers = None,
                     tgt_text = None,
@@ -62,6 +66,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         self.clip_loss_lambda = self.prepare_scheduler(clip_loss_lambda)
         self.rec_loss_lambda = self.prepare_scheduler(rec_loss_lambda)
         self.consistency_lambda = self.prepare_scheduler(consistency_lambda)
+        self.codebook_lambda = self.prepare_scheduler(codebook_lambda)
 
         # initialize model
         self.bVAE_enc = instantiate_from_config(video_ecnoder_config) 
@@ -69,6 +74,12 @@ class DiCoMOGANCLIP(pl.LightningModule):
         self.stylegan_G = instantiate_from_config(stylegan_gen_config)
         self.requires_grad(self.stylegan_G, False)
         self.stylegan_G.eval() # TODO: rm the eval maybe?
+        
+        self.quantize = False
+        if vqvae_config is not None:
+            self.quantize = instantiate_from_config(vqvae_config)
+            self.quant_conv = torch.nn.Conv2d(video_ecnoder_config.params.spatial_code_ch, vqvae_config.params.e_dim, 1, dtype=torch.float64)
+            self.post_quant_conv = torch.nn.Conv2d(vqvae_config.params.e_dim, video_ecnoder_config.params.spatial_code_ch, 1, dtype=torch.float64)
 
         # loss
         self.criterionVGG = LPIPS().eval()
@@ -166,6 +177,13 @@ class DiCoMOGANCLIP(pl.LightningModule):
     def on_train_epoch_start(self,):
             self.trainer.train_dataloader.dataset.datasets.reset()
 
+    def quantize_dynamic_rep(self, rep):
+        h = self.quant_conv(rep)
+        quant, emb_loss, info = self.quantize(h)
+        quant = self.post_quant_conv(quant)
+        return quant, emb_loss.mean()
+
+
     def training_step(self, batch, batch_idx):
         input_desc = batch['raw_desc'] # B
 
@@ -209,7 +227,12 @@ class DiCoMOGANCLIP(pl.LightningModule):
         txt_feat.requires_grad = False
 
         # vae encode frames
-        zs, zd, mu_logvar_s, mu_logvar_d = self.bVAE_enc(vid_rs_bf, ts)
+        video_zs, video_zd = self.bVAE_enc.video_representation(vid_rs_bf, ts) # video_zd: B x C x H' x W', video_zs: B x D
+        codebook_loss = 0
+        if self.quantize is not None:
+            video_zd, codebook_loss = self.quantize_dynamic_rep(video_zd) # video_zd: B x C x H' x W'
+        zs, zd, mu_logvar_s, mu_logvar_d = self.bVAE_enc.frame_representation(video_zs, video_zd, ts)
+
         video_style = zs
         video_dynamics = zd
                                
@@ -284,6 +307,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         self.log("lambda/rl_loss", self.rec_loss_lambda(self.global_step), prog_bar=False, logger=True, on_step=False, on_epoch=True)
         self.log("lambda/clip_loss", self.clip_loss_lambda(self.global_step), prog_bar=False, logger=True, on_step=False, on_epoch=True)
         self.log("lambda/l2_latent_loss", self.l2_latent_lambda(self.global_step) , prog_bar=False, logger=True, on_step=False, on_epoch=True)
+        self.log("lambda/codebook_loss", self.codebook_lambda(self.global_step) , prog_bar=False, logger=True, on_step=False, on_epoch=True)
 
         # losses
         self.log("train/consistency_loss", consistency_loss, prog_bar=False, logger=True, on_step=True, on_epoch=False)
@@ -295,7 +319,8 @@ class DiCoMOGANCLIP(pl.LightningModule):
                     + self.clip_loss_lambda(self.global_step) * directional_clip_loss \
                     + self.l2_latent_lambda(self.global_step) * latent_loss \
                     + self.lambda_vgg(self.global_step) * vgg_loss \
-                    + self.consistency_lambda(self.global_step) * consistency_loss
+                    + self.consistency_lambda(self.global_step) * consistency_loss \
+                    + self.codebook_lambda(self.global_step) * codebook_loss
         self.log("train/total_loss", total_loss, prog_bar=True, logger=True, on_step=True, on_epoch=False)
         return total_loss
 
@@ -351,7 +376,11 @@ class DiCoMOGANCLIP(pl.LightningModule):
         txt_feat.requires_grad = False
 
         # vae encode frames
-        zs, zd, mu_logvar_s, mu_logvar_d = self.bVAE_enc(vid_rs, ts)
+        video_zs, video_zd = self.bVAE_enc.video_representation(vid_rs, ts)
+        codebook_loss = 0
+        if self.quantize is not None:
+            video_zd, codebook_loss = self.quantize_dynamic_rep(video_zd)
+        zs, zd, mu_logvar_s, mu_logvar_d = self.bVAE_enc.frame_representation(video_zs, video_zd, ts)
         video_style = zs
         video_dynamics = zd
 
@@ -413,6 +442,11 @@ class DiCoMOGANCLIP(pl.LightningModule):
     def configure_optimizers(self):
         lr = self.learning_rate
         vae_params = list(self.bVAE_enc.parameters())
+
+        if self.quantize is not None:
+            vae_params += list(self.quantize.parameters()) \
+                          + list(self.quant_conv.parameters()) \
+                          + list(self.post_quant_conv.parameters())
 
         style_m_params = list(self.style_mapper.parameters())
         

@@ -65,6 +65,8 @@ class CLIPLoss(pl.LightningModule):
     def __init__(self, lambda_direction=1., lambda_global=0.,  
                     direction_loss_type='cosine', clip_model='ViT-B/32', 
                     projection_direction=None, norm=True,
+                    txt_embed_mean_path = None,
+                    img_embed_mean_path = None, 
                     **kwargs):
         super(CLIPLoss, self).__init__()
         self.model, clip_preprocess = clip.load(clip_model, device=self.device)
@@ -89,7 +91,7 @@ class CLIPLoss(pl.LightningModule):
             self.proj_norm = self.proj_directions.norm(2) ** 2 # N 
             self.betas = np.linspace(projection_direction['beta_st'], projection_direction['beta_en'], projection_direction['steps'])
  
-
+        # self.
     # def get_perceptual_loss(self, imgs1, imgs2):
 
 
