@@ -14,8 +14,7 @@ class LambdaScheduler:
         else:
             t = (n - self.lr_warm_up_steps) / (self.lr_max_decay_steps - self.lr_warm_up_steps)
             t = min(t, 1.0)
-            lr = self.lr_min + 0.5 * (self.lr_max - self.lr_min) * (
-                    1 + np.cos(t * np.pi))
+            lr = self.lr_min + t * (self.lr_max - self.lr_min) 
             self.last_lr = lr
             return lr
 
