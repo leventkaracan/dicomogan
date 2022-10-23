@@ -310,6 +310,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         self.log("lambda/codebook_loss", self.codebook_lambda(self.global_step) , prog_bar=False, logger=True, on_step=False, on_epoch=True)
 
         # losses
+        self.log("train/codebook_loss", codebook_loss, prog_bar=False, logger=True, on_step=True, on_epoch=False)
         self.log("train/consistency_loss", consistency_loss, prog_bar=False, logger=True, on_step=True, on_epoch=False)
         self.log("train/vgg_loss", vgg_loss, prog_bar=False, logger=True, on_step=True, on_epoch=False)
         self.log("train/rl_loss", reconstruction_loss, prog_bar=True, logger=True, on_step=True, on_epoch=False)
