@@ -12,6 +12,7 @@ import torchvision.transforms as transforms
 from torchvision.utils import save_image
 from dicomogan.losses.clip_loss import CLIPLoss
 from dicomogan.losses.loss_lib import GANLoss, VGGLoss, HybridOptim
+from dicomogan.losses.lpips import LPIPS
 import os
 from PIL import Image
 import random
@@ -27,6 +28,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
     def __init__(self,
                     vae_cond_dim,
                     beta,
+                    alpha,
                     video_ecnoder_config,
                     video_decoder_config,
                     clip_projection_config,
@@ -56,6 +58,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         super().__init__()
         self.vae_cond_dim = vae_cond_dim
         self.beta = beta
+        self.alpha = alpha
         self.scheduler_config = scheduler_config
         self.n_critic = n_critic
         self.frame_log_size = frame_log_size
@@ -89,7 +92,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         self.stylegan_G.eval() # TODO: rm the eval maybe
 
         # loss
-        self.criterionVGG = VGGLoss()
+        self.criterionVGG = LPIPS()
         self.rec_loss = nn.MSELoss()
         self.l2_latent_loss = nn.MSELoss()
         self.clip_loss = CLIPLoss()
@@ -217,15 +220,15 @@ class DiCoMOGANCLIP(pl.LightningModule):
         txt_feat_tb = txt_feat_tf.contiguous().view(T*bs, -1)  # T*B x D
         txt_feat_tb.requires_grad = False
 
-        style_type = np.random.randint(2)
-        if style_type == 0:
+        style_type = np.random.rand()
+        if style_type <= self.alpha:
             # encode text
             zC = self.clip_projection(txt_feat) # B x D'
             zC = zC.unsqueeze(0).repeat(T, 1, 1) # T x B x D'
             zC = zC.contiguous().view(T*bs, -1) # T*B x D'
             clip_video_style = zC
 
-        elif style_type == 1:
+        else:
             # extract frame features
             ind = np.random.randint(T)
             frame_feat = self.clip_loss.encode_images(vid_tf[ind] * 2 - 1) # B x D
@@ -296,7 +299,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         latent_loss = torch.maximum(self.l2_latent_loss(src_inversion, w_latents) - self.l2_latent_eps / 2, torch.zeros(1).to(src_inversion.device)[0]) 
         latent_loss += torch.maximum(self.l2_latent_loss(src_inversion, w_latents_clip) - self.l2_latent_eps / 2, torch.zeros(1).to(src_inversion.device)[0]) 
         latent_loss += torch.maximum(self.l2_latent_loss(src_inversion, w_latents_clip_mismatched) - self.l2_latent_eps, torch.zeros(1).to(src_inversion.device)[0])
-        vgg_loss = 0.5 * (self.criterionVGG(reconstruction_inp_res / 2 + 0.5, video_sample) + self.criterionVGG(reconstruction_clip_inp_res / 2 + 0.5, video_sample))
+        vgg_loss = 0.5 * (self.criterionVGG(reconstruction_inp_res / 2 + 0.5, video_sample).mean() + self.criterionVGG(reconstruction_clip_inp_res / 2 + 0.5, video_sample).mean())
         
         dim_loss = self.dim_loss(video_style[:bs], clip_video_style[:bs])
         weight_norm_loss = self.clip_projection._weight_norm(self.device)
