@@ -252,7 +252,9 @@ class SetupCallback(Callback):
             # if self.model is not None:
             #     wandb.watch(self.model, log_freq=5000)
             # Create logdirs and save configs
+            print("log", self.logdir)
             os.makedirs(self.logdir, exist_ok=True)
+            print("acess", os.access(self.logdir, os.W_OK))
             os.makedirs(self.ckptdir, exist_ok=True)
             os.makedirs(self.cfgdir, exist_ok=True)
 
@@ -680,6 +682,8 @@ if __name__ == "__main__":
         default_logger_cfg = default_logger_cfgs["wandb"]
         logger_cfg = lightning_config.logger or OmegaConf.create()
         logger_cfg = OmegaConf.merge(default_logger_cfg, logger_cfg)
+        os.makedirs(logdir, exist_ok=True)
+        os.makedirs(os.path.join(logdir, 'wandb'), exist_ok=True)
         trainer_kwargs["logger"] = instantiate_from_config(logger_cfg)
         
 

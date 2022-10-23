@@ -181,7 +181,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         h = self.quant_conv(rep)
         quant, emb_loss, info = self.quantize(h)
         quant = self.post_quant_conv(quant)
-        return quant, emb_loss.mean()
+        return quant, emb_loss.sum()
 
 
     def training_step(self, batch, batch_idx):
