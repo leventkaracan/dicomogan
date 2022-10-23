@@ -21,8 +21,8 @@ model:
       params:
         warm_up_steps: 0
         lr_min: 0.01
-        lr_max: 2.0
-        max_decay_steps: 10000
+        lr_max: 1.0
+        max_decay_steps: 75000
 
     rec_loss_lambda:
       target: dicomogan.models.utils.LambdaScheduler
@@ -30,7 +30,7 @@ model:
         warm_up_steps: 25000
         lr_min: 0.01
         lr_max: 0.5
-        max_decay_steps: 10000
+        max_decay_steps: 75000
     
     video_ecnoder_config:
       target: dicomogan.new_modules.EncoderVideo_LatentODE
