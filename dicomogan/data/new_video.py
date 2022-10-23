@@ -150,6 +150,8 @@ class VideoDataFashion(data.Dataset):
         else:
             st = local_state.randint(0, len(self.frame_numbers[bin])-self.n_sampled_frames)
             sampleT = np.array(self.frame_numbers[bin][st:st+self.n_sampled_frames])
+            
+        return_list['video_name'] = self.data_paths[index][sampleT[0]].split("/")[-2]
 
         
         I, inv_I, W = None, None, None

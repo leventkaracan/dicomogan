@@ -127,6 +127,69 @@ class EncoderVideo_LatentODE(nn.Module):
         eps = std.data.new(std.size()).normal_()
         return mu + std*eps
 
+    def get_style_and_dynamics(self, x, t):
+        batch_size = x.size(0)
+        T = x.size(1)
+
+        xi = x.permute(1, 0, 2, 3, 4).contiguous() # T x B x C x H x W
+
+
+        xi = xi.reshape(T*batch_size, x.shape[2], x.shape[3], x.shape[4]) # T*B x C x H x W
+        xi, xi_gl = self.swapae_encoder(xi) # xi: T*B x spatial_code_ch x H' x W', xi_gl: T*B x global_code_ch
+        xi = xi.view(T, batch_size, xi.shape[1], xi.shape[2], xi.shape[3]) # T x B x D' x H' x W'
+        xi_gl = xi_gl.view(T, batch_size, -1)  # T x B x D'
+
+        # all_xi, all_xi_gl = [], []
+        # for sub_x in xi:
+        #     sub_a, sub_b = self.swapae_encoder(sub_x)
+        #     all_xi.append(sub_a)
+        #     all_xi_gl.append(sub_b)
+        
+        # xi = torch.stack(all_xi, 0) # T x B x D' x H' x W'
+        # xi_gl = torch.stack(all_xi_gl, 0) # T x B x D'
+
+        ##### ODE encoding
+        mask = torch.zeros(T, 1) # TODO: make mask
+        # TODO: differenciate between interp and exterp when sampling
+        if self.sampling_type == "Interpolate":
+            inds = np.random.choice(np.arange(1, T-1), min(self.n_samples, T) - 4, replace=False)
+            mask[inds, :] = 1
+            mask[0, :] = 1
+            mask[T-1, :] = 1
+        elif self.sampling_type == "Extrapolate":
+            #inds = np.random.choice(T-1, min(self.n_samples, T) - 1, replace=False)
+            inds = np.arange(0, T-1)
+            mask[inds, :] = 1
+            #mask[0, :] = 1
+        elif self.sampling_type == "Static":
+            mask = torch.ones(T, 1)
+        mask = mask.unsqueeze(0).repeat(batch_size, 1, 1).to(xi.device) # B x T x 1
+        zd0, _ = self.encoder_z0(input_tensor=xi, time_steps=t, mask=mask) # B x spatial_code_ch x H' x W'
+        
+        zd0 = zd0.view(batch_size, -1)
+        
+        zd0 = torch.relu(self.lin(zd0))
+        zd0 = self.mu_gen_d(zd0) # B x D
+
+        h_max = torch.max(xi_gl, dim=0)[0] # B x D'
+        mu_logvars = self.mu_logvar_gen_s(h_max) # B x 2 * D''
+        mus, logvars = mu_logvars.view(-1, self.static_latent_dim, 2).unbind(-1) # B x D'' 
+        zs = self.reparametrize(mus, logvars) # B x D ''
+        zs = zs.unsqueeze(0).repeat(T, 1, 1).view(T * batch_size, -1)
+
+        return zs, zd0
+
+
+
+    def generate_dynamics(self, zd0, t, shape):
+        zd0 = zd0.to(torch.float64)
+        zdt = self.diffeq_solver(zd0, t) # B x T x D
+        zdt = zdt.to(torch.float32) # B x T x D
+        #zdt = zdt.permute(1, 0, 2, 3, 4).contiguous().view(batch_size * T, -1) # T * B x spatial_code_ch * H' * W'
+        zdt = zdt.permute(1, 0, 2).contiguous().view(shape[0] * shape[1], -1)
+
+        return zdt
+
     def forward(self, x, t): # x: B x T x C x H x W , t: (B x T)
         batch_size = x.size(0)
         T = x.size(1)
@@ -139,7 +202,6 @@ class EncoderVideo_LatentODE(nn.Module):
         xi = xi.view(T, batch_size, xi.shape[1], xi.shape[2], xi.shape[3]) # T x B x D' x H' x W'
         xi_gl = xi_gl.view(T, batch_size, -1)  # T x B x D'
 
-
         # all_xi, all_xi_gl = [], []
         # for sub_x in xi:
         #     sub_a, sub_b = self.swapae_encoder(sub_x)
@@ -148,9 +210,6 @@ class EncoderVideo_LatentODE(nn.Module):
         
         # xi = torch.stack(all_xi, 0) # T x B x D' x H' x W'
         # xi_gl = torch.stack(all_xi_gl, 0) # T x B x D'
-
-
-
 
         ##### ODE encoding
         mask = torch.zeros(T, 1) # TODO: make mask
