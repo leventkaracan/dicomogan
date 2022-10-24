@@ -179,8 +179,8 @@ class DiCoMOGANCLIP(pl.LightningModule):
         ts = ts - ts[0]
 
         # downsample res for vae TODO: experiment with downsampling the resolution much more/ No downsampling
-        vid_rs = nn.functional.interpolate(video_sample, scale_factor=0.5, mode="bicubic", align_corners=False, recompute_scale_factor=True) # T*B x C x H//2 x W//2 
-        vid_rs_tf = vid_rs.view(T, bs, ch, int(height*0.5),int(width*0.5) )
+        vid_rs = nn.functional.interpolate(video_sample, size=(256//2, 192//2),  mode="bicubic", align_corners=False) # T*B x C x H//2 x W//2 
+        vid_rs_tf = vid_rs.view(T, bs, ch, vid_rs.shape[2], vid_rs.shape[3])
         vid_rs_bf = vid_rs_tf.permute(1,0,2,3,4).contiguous() # B x T x C x H//2 x W//2
 
 
@@ -203,9 +203,9 @@ class DiCoMOGANCLIP(pl.LightningModule):
         src_inversion = src_inversion_tf.reshape(T*bs, src_inversion_tf.shape[-2], src_inversion_tf.shape[-1])
         w_latents = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, *frame_rep)
 
-        ret = self.stylegan_G(w_latents) / 2 + 0.5 
+        ret = self.stylegan_G(w_latents)
         ret = ret.reshape(T, bs, ret.shape[1], ret.shape[2], ret.shape[3]).permute(1, 0, 2, 3, 4)
-        return torch.clamp(ret, 0, 1)
+        return ret
 
     def training_step(self, batch, batch_idx):
         input_desc = batch['raw_desc'] # B

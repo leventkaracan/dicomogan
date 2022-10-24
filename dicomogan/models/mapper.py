@@ -84,7 +84,7 @@ class TripleMFModulationModule(nn.Module):
         gamma, beta = self.combine_modulation_r3(r_gamma, r_beta, gamma_3, beta_3)
 
         # TODO: experiment with adding 
-        out = x * (gamma) + beta
+        out = x * (1 + gamma) + beta
         out = self.leakyrelu(out)
         return out
 
@@ -158,7 +158,7 @@ class ModulationModule(nn.Module):
         # print(f"x: {x.shape}")
         # print(f"gamma: {gamma.shape}")
         # print(f"beta: {beta.shape}")
-        out = x * (gamma) + beta
+        out = x * (1 + gamma) + beta
         out = self.leakyrelu(out)
         return out
 
