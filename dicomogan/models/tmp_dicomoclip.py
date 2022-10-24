@@ -166,6 +166,47 @@ class DiCoMOGANCLIP(pl.LightningModule):
     def on_train_epoch_start(self,):
             self.trainer.train_dataloader.dataset.datasets.reset()
 
+
+    def forward(self, vid_bf, sampleT, mean_inversion, txt_feat):
+
+        # videos reshape
+        bs, T, ch, height, width = vid_bf.size()
+        vid_tf = vid_bf.permute(1,0,2,3,4) # T x B x C x H x W 
+        video_sample = vid_tf.contiguous().view(T * bs, ch, height, width) # T*B x C x H x W // range [0,1]
+        video_sample_norm = video_sample * 2 - 1 # range [-1, 1] to pass to the generator and disc
+
+        ts = (sampleT) / self.video_length
+        ts = ts - ts[0]
+
+        # downsample res for vae TODO: experiment with downsampling the resolution much more/ No downsampling
+        vid_rs = nn.functional.interpolate(video_sample, scale_factor=0.5, mode="bicubic", align_corners=False, recompute_scale_factor=True) # T*B x C x H//2 x W//2 
+        vid_rs_tf = vid_rs.view(T, bs, ch, int(height*0.5),int(width*0.5) )
+        vid_rs_bf = vid_rs_tf.permute(1,0,2,3,4).contiguous() # B x T x C x H//2 x W//2
+
+
+        # repeat text features 
+        txt_feat_tf = txt_feat.unsqueeze(0).repeat(T, 1, 1) # T x B x D
+        txt_feat = txt_feat_tf.contiguous().view(T*bs, -1)  # T*B x D
+        txt_feat.requires_grad = False
+
+        # vae encode frames
+        zs, zd, mu_logvar_s, mu_logvar_d = self.bVAE_enc(vid_rs_bf, ts)
+        video_style = zs
+        video_dynamics = zd
+                               
+
+        # frame rep (video_style, video_content, dynamics)
+        frame_rep = (txt_feat, video_dynamics, None) # T*B x D1+D2
+
+
+        src_inversion_tf = mean_inversion.repeat(T, 1, 1, 1)
+        src_inversion = src_inversion_tf.reshape(T*bs, src_inversion_tf.shape[-2], src_inversion_tf.shape[-1])
+        w_latents = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, *frame_rep)
+
+        ret = self.stylegan_G(w_latents) / 2 + 0.5 
+        ret = ret.reshape(T, bs, ret.shape[1], ret.shape[2], ret.shape[3]).permute(1, 0, 2, 3, 4)
+        return torch.clamp(ret, 0, 1)
+
     def training_step(self, batch, batch_idx):
         input_desc = batch['raw_desc'] # B
 
@@ -222,8 +263,8 @@ class DiCoMOGANCLIP(pl.LightningModule):
         txt_feat_mismatch, _ = self.preprocess_text_feat(txt_feat, mx_roll=2) # T*B x D2
         
         # frame rep (video_style, video_content, dynamics)
-        frame_rep = (txt_feat, video_style, video_dynamics) # T*B x D1+D2
-        frame_rep_txt_mismatched = (txt_feat_mismatch, video_style, video_dynamics) # T*B x D1+D2
+        frame_rep = (txt_feat, video_dynamics, None) # T*B x D1+D2
+        frame_rep_txt_mismatched = (txt_feat_mismatch, video_dynamics, None) # T*B x D1+D2
 
         # predict latents delta
         mean_inversion = inversions_tf.mean(0, keepdims=True) # 1 x B x 18 x 512
@@ -358,12 +399,15 @@ class DiCoMOGANCLIP(pl.LightningModule):
         
         # roll batch-wise
         mismatch_txt_feat, _ = self.preprocess_text_feat(txt_feat, mx_roll=2)
-        mismatched_video_style, _ = self.preprocess_text_feat(video_style, mx_roll=2)
+        # mismatched_video_style, _ = self.preprocess_text_feat(video_style, mx_roll=2)
 
 
         # frame rep (video_style, video_content, dynamics)
-        frame_rep = (txt_feat, video_style, video_dynamics) # T*B x D1+D2
-        frame_rep_txt_mismatched = (mismatch_txt_feat, video_style, video_dynamics) # T*B x D1+D2
+        # frame_rep = (txt_feat, video_style, video_dynamics) # T*B x D1+D2
+        # frame_rep_txt_mismatched = (mismatch_txt_feat, video_style, video_dynamics) # T*B x D1+D2
+                # frame rep (video_style, video_content, dynamics)
+        frame_rep = (txt_feat, video_dynamics, None) # T*B x D1+D2
+        frame_rep_txt_mismatched = (mismatch_txt_feat, video_dynamics, None) # T*B x D1+D2
 
         # predict latents delta
         src_inversion = inversions_tf.mean(0, keepdims=True) # 1 x B x 18 x 512

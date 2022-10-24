@@ -103,7 +103,7 @@ class MFModulationModule(nn.Module):
         self.gamma_function_2 = nn.Sequential(nn.Linear(attr_vec_dim2, 512), nn.LayerNorm([512]), nn.LeakyReLU(), nn.Linear(512, 512))
         self.beta_function_2 = nn.Sequential(nn.Linear(attr_vec_dim2, 512), nn.LayerNorm([512]), nn.LeakyReLU(), nn.Linear(512, 512))
         
-        self.combine_modulation = MFMOD(mod_shape)
+        # self.combine_modulation = MFMOD(mod_shape)
         self.leakyrelu = nn.LeakyReLU()
 
     def forward(self, x, embd1, embd2, cut_flag):
@@ -121,10 +121,12 @@ class MFModulationModule(nn.Module):
         gamma_2 = self.gamma_function_2(embd2.float())
         beta_2 = self.beta_function_2(embd2.float())
         
-        gamma, beta = self.combine_modulation(gamma_1, beta_1, gamma_2, beta_2)
+        # gamma, beta = self.combine_modulation(gamma_1, beta_1, gamma_2, beta_2)
 
         # TODO: experiment with adding 
-        out = x * (gamma) + beta
+        out = x * ( gamma_2) + beta_2
+        out = out * ( gamma_1) + beta_1
+        out += x
         out = self.leakyrelu(out)
         return out
 

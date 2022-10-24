@@ -677,6 +677,7 @@ if __name__ == "__main__":
                
             },
         }
+        os.makedirs(logdir, exist_ok=True)
         os.makedirs(os.path.join(logdir, 'wandb'), exist_ok=True)
         default_logger_cfg = default_logger_cfgs["wandb"]
         logger_cfg = lightning_config.logger or OmegaConf.create()

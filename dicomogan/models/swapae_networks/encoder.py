@@ -75,24 +75,24 @@ class StyleGAN2ResnetEncoder(BaseNetwork):
             )
         )
 
-        self.DownToGlobalCode = nn.Sequential()
-        for i in range(netE_num_downsampling_gl):
-            idx_from_beginning = netE_num_downsampling_sp + i
-            self.DownToGlobalCode.add_module(
-                "ConvLayerDownBy%d" % (2 ** idx_from_beginning),
-                ConvLayer(self.nc(idx_from_beginning),
-                          self.nc(idx_from_beginning + 1), kernel_size=3,
-                          blur_kernel=[1], downsample=True, pad=0)
-            )
+        # self.DownToGlobalCode = nn.Sequential()
+        # for i in range(netE_num_downsampling_gl):
+        #     idx_from_beginning = netE_num_downsampling_sp + i
+        #     self.DownToGlobalCode.add_module(
+        #         "ConvLayerDownBy%d" % (2 ** idx_from_beginning),
+        #         ConvLayer(self.nc(idx_from_beginning),
+        #                   self.nc(idx_from_beginning + 1), kernel_size=3,
+        #                   blur_kernel=[1], downsample=True, pad=0)
+        #     )
 
-        nchannels = self.nc(netE_num_downsampling_sp +
-                            netE_num_downsampling_gl)
-        self.add_module(
-            "ToGlobalCode",
-            nn.Sequential(
-                EqualLinear(nchannels, global_code_ch)
-            )
-        )
+        # nchannels = self.nc(netE_num_downsampling_sp +
+        #                     netE_num_downsampling_gl)
+        # self.add_module(
+        #     "ToGlobalCode",
+        #     nn.Sequential(
+        #         EqualLinear(nchannels, global_code_ch)
+        #     )
+        # )
 
     def nc(self, idx):
         nc = self.netE_nc_steepness ** (5 + idx)
@@ -113,12 +113,12 @@ class StyleGAN2ResnetEncoder(BaseNetwork):
             feature = F.interpolate(
                 feature, size=(7, 7), mode='bilinear', align_corners=False)
 
-        x = self.DownToGlobalCode(midpoint)
-        x = x.mean(dim=(2, 3)) # global avg
-        gl = self.ToGlobalCode(x)
+        # x = self.DownToGlobalCode(midpoint)
+        # x = x.mean(dim=(2, 3)) # global avg
+        # gl = self.ToGlobalCode(x)
         sp = normalize(sp)
-        gl = normalize(gl)
+        # gl = normalize(gl)
         if extract_features:
             return sp, gl, feature
         else:
-            return sp, gl
+            return sp, None
