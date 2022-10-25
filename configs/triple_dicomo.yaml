@@ -7,12 +7,13 @@ model:
 
   params:
     # tgt_text : 'Yellow Dresses Made from polyester with V-neckline. The dress is all over ribbed and has front buttons and is short sleeves. The dress is regular fit'
+    frame_log_size : [512, 384]
     video_length : 40
     delta_inversion_weight : 0.1
     l2_latent_eps : 0.02
     beta: 8
 
-    lambda_vgg: 10.0
+    lambda_vgg: 5.0
     l2_latent_lambda : 1.0
     clip_loss_lambda : 0.0
 
@@ -70,7 +71,7 @@ model:
         fine_cut_flag: False
         mod_shape : [[1, 4, 1], [1, 4, 1], [1, 10, 1]]
         num_of_layers : [10, 10, 10]
-        attr_vec_dims: [512, 32, 0] #much match W_cont + CLIP embedding
+        attr_vec_dims: [512, 64, 0] #much match W_cont + CLIP embedding
 
 
     
@@ -91,7 +92,7 @@ data:
         irregular_sampling : True
         batch_size : 2 #MUST match batch size 
         # crop : [512, 384]
-        size : [256, 192]
+        size : [512, 384]
         # attribute : "Color"
         # attribute_stats : 'data/fashion/attributes_stats.yaml'
 
@@ -107,7 +108,7 @@ data:
         irregular_sampling : False
         batch_size : 2 #MUST match batch size 
         # crop : [512, 384]
-        size : [256, 192]
+        size : [512, 384]
         # attribute : "Color"
         # attribute_stats : 'data/fashion/attributes_stats.yaml'
 

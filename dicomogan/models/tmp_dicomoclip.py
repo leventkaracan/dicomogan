@@ -46,7 +46,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
                     ckpt_path=None,
                     ignore_keys=[], 
                     video_length = 6,
-                    frame_log_size=(256, 192)
+                    frame_log_size=(1024, 512)
                     ):
         super().__init__()
         self.beta = beta
