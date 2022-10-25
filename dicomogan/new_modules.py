@@ -59,6 +59,7 @@ class EncoderVideo_LatentODE(nn.Module):
         base_dim = spatial_code_ch
         input_size = (img_size[0]// resize, img_size[1] // resize)
         ode_dim = base_dim
+        self.leakyrelu = nn.LeakyReLU()
 
         # Shape required to start transpose convs
         self.swapae_encoder = StyleGAN2ResnetEncoder(netE_num_downsampling_sp=netE_num_downsampling_sp, 
@@ -174,7 +175,7 @@ class EncoderVideo_LatentODE(nn.Module):
 
         zdt = zdt.to(torch.float32)
         # reduce dim to dynamic dim 
-        zdt = torch.relu(self.lin(zdt))
+        zdt = self.leakyrelu(self.lin(zdt))
         zdt = self.mu_gen_d(zdt)  # T * B x D
 
         # Question: why using hs and not h_max? Isn't redundent? RIP

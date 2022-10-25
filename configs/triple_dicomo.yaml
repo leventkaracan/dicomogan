@@ -69,6 +69,7 @@ model:
         medium_cut_flag: False
         fine_cut_flag: False
         mod_shape : [[1, 4, 1], [1, 4, 1], [1, 10, 1]]
+        num_of_layers : [10, 10, 10]
         attr_vec_dims: [512, 32, 0] #much match W_cont + CLIP embedding
 
 
