@@ -13,7 +13,8 @@ class StyleGAN2Generator(nn.Module):
     def __init__(self, pkl_file):
         super().__init__()
         with dnnlib.util.open_url(pkl_file) as f:
-            self.G = legacy.load_network_pkl(f)['G_ema']
+            self.G = legacy.load_network_pkl(f)['G_ema'].eval()
+            self.G = self.G.float()
     
     def forward(self, w):
         return self.G.synthesis(w, noise_mode='const', force_fp32=True)

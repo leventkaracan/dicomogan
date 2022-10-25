@@ -128,11 +128,10 @@ class EncoderVideo_LatentODE(nn.Module):
         std = logvar.div(2).exp()
         eps = std.data.new(std.size()).normal_()
         return mu + std*eps
-
-    def forward(self, x, t): # x: B x T x C x H x W , t: (B x T)
+    
+    def video_dynamics(self, x, t, mask_t): # x: B x T x C x H x W , t: (B x T)
         batch_size = x.size(0)
         T = x.size(1)
-
         xi = x.permute(1, 0, 2, 3, 4).contiguous() # T x B x C x H x W
 
         # xi = xi.reshape(T*batch_size, x.shape[2], x.shape[3], x.shape[4]) # T*B x C x H x W
@@ -150,11 +149,34 @@ class EncoderVideo_LatentODE(nn.Module):
         # xi_gl = torch.stack(all_xi_gl, 0) # T x B x D'
 
 
-
         xi = xi.to(torch.float64)
         ##### ODE encoding
-        mask = torch.zeros(T, 1) # TODO: make mask
-        # TODO: differenciate between interp and exterp when sampling
+        mask_t = mask_t.unsqueeze(0).repeat(batch_size, 1, 1).to(xi.device).to(torch.float64) # B x T x 1
+        zd0, _ = self.encoder_z0(input_tensor=xi.to(torch.float64), time_steps=t, mask=mask_t) # B x spatial_code_ch x H' x W'
+
+        return zd0 
+    
+    def solve_ode(self, zd0, t):
+        # solve for the whole video
+        # zd0:  B x spatial_code_ch x H' x W'
+        # t: T
+        batch_size = zd0.size(0)
+        T = t.size(0)
+
+        zdt = self.diffeq_solver(zd0, t) # B x T x spatial_code_ch x H' x W'
+        zdt = zdt.permute(1, 0, 2, 3, 4).contiguous().view(batch_size * T, -1) # T * B x spatial_code_ch * H' * W'
+
+        zdt = zdt.to(torch.float32)
+        # reduce dim to dynamic dim 
+        zdt = self.leakyrelu(self.lin(zdt))
+        zdt = self.mu_gen_d(zdt)  # T * B x D
+
+        return zdt
+
+    def forward(self, x, t): # x: B x T x C x H x W , t: (B x T)
+        batch_size = x.size(0)
+        T = x.size(1)
+        mask = torch.zeros(T, 1) 
         if self.sampling_type == "Interpolate":
             inds = np.random.choice(np.arange(1, T-1), min(self.n_samples, T) - 2 - self.n_frames_interp, replace=False)
             mask[inds, :] = 1
@@ -166,22 +188,15 @@ class EncoderVideo_LatentODE(nn.Module):
             mask[inds, :] = 1
         elif self.sampling_type == "Static":
             mask = torch.ones(T, 1)
-        mask = mask.unsqueeze(0).repeat(batch_size, 1, 1).to(xi.device).to(torch.float64) # B x T x 1
-        zd0, _ = self.encoder_z0(input_tensor=xi.to(torch.float64), time_steps=t, mask=mask) # B x spatial_code_ch x H' x W'
+        
+        zd0 = self.video_dynamics(x, t, mask)
+        zdt = self.solve_ode(zd0, t)
 
-        # solve for the whole video
-        zdt = self.diffeq_solver(zd0, t) # B x T x spatial_code_ch x H' x W'
-        zdt = zdt.permute(1, 0, 2, 3, 4).contiguous().view(batch_size * T, -1) # T * B x spatial_code_ch * H' * W'
-
-        zdt = zdt.to(torch.float32)
-        # reduce dim to dynamic dim 
-        zdt = self.leakyrelu(self.lin(zdt))
-        zdt = self.mu_gen_d(zdt)  # T * B x D
-
+        
         # Question: why using hs and not h_max? Isn't redundent? RIP
         # TODO: experiment with non stocastic sampling
         # h_max = torch.max(xi_gl, dim=0)[0] # B x D'
         # zs = self.mu_logvar_gen_s(h_max) # B x 2 * D''
         # zs = zs.unsqueeze(0).repeat(T, 1, 1).view(T * batch_size, -1)
 
-        return None, zdt, (None, None), (None, None)
+        return zdt
