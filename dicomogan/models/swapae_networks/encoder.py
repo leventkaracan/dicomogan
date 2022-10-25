@@ -104,6 +104,7 @@ class StyleGAN2ResnetEncoder(BaseNetwork):
         x = self.FromRGB(x)
         midpoint = self.DownToSpatialCode(x)
         sp = self.ToSpatialCode(midpoint)
+        sp = normalize(sp)
 
         if extract_features:
             padded_midpoint = F.pad(midpoint, (1, 0, 1, 0), mode='reflect')
@@ -116,9 +117,9 @@ class StyleGAN2ResnetEncoder(BaseNetwork):
         # x = self.DownToGlobalCode(midpoint)
         # x = x.mean(dim=(2, 3)) # global avg
         # gl = self.ToGlobalCode(x)
-        sp = normalize(sp)
+        
         # gl = normalize(gl)
         if extract_features:
-            return sp, gl, feature
+            return sp, None, feature
         else:
             return sp, None

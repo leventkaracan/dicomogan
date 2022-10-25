@@ -7,6 +7,7 @@ model:
 
   params:
     # tgt_text : 'Yellow Dresses Made from polyester with V-neckline. The dress is all over ribbed and has front buttons and is short sleeves. The dress is regular fit'
+    video_length : 40
     delta_inversion_weight : 0.1
     l2_latent_eps : 0.02
     beta: 8
@@ -34,13 +35,13 @@ model:
     video_ecnoder_config:
       target: dicomogan.new_modules.EncoderVideo_LatentODE
       params:
-        img_size : [128,96] # must match video_decoder
+        img_size : [256, 192] # must match video_decoder
         static_latent_dim : 64
         dynamic_latent_dim : 64 # must match ODE_func_config latent_dim
         hid_channels : 32 
         kernel_size : 4
         hidden_dim : 256
-        netE_num_downsampling_sp : 3
+        netE_num_downsampling_sp : 4
         netE_num_downsampling_gl : 1
         spatial_code_ch : 256
         global_code_ch : 512

@@ -8,20 +8,20 @@ from dicomogan.vidode import Encoder, Encoder_z0_ODE_ConvGRU, create_convnet, OD
 from dicomogan.models.swapae_networks.encoder import StyleGAN2ResnetEncoder
 # from torchdiffeq import odeint_adjoint as odeint
 
-# def kaiming_init(m):
-#     if isinstance(m, (nn.Linear, nn.Conv2d)):
-#         nn.init.kaiming_normal_(m.weight)
-#         if m.bias is not None:
-#             m.bias.data.fill_(0)
-#     elif isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d)):
-#         m.weight.data.fill_(1)
-#         if m.bias is not None:
-#             m.bias.data.fill_(0)
-#     elif isinstance(m, (nn.InstanceNorm1d, nn.InstanceNorm2d)):
-#         if m.weight is not None:
-#             m.weight.data.fill_(1)
-#         if m.bias is not None:
-#             m.bias.data.fill_(0)
+def kaiming_init(m):
+    if isinstance(m, (nn.Linear, nn.Conv2d)):
+        nn.init.kaiming_normal_(m.weight)
+        if m.bias is not None:
+            m.bias.data.fill_(0)
+    elif isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d)):
+        m.weight.data.fill_(1)
+        if m.bias is not None:
+            m.bias.data.fill_(0)
+    elif isinstance(m, (nn.InstanceNorm1d, nn.InstanceNorm2d)):
+        if m.weight is not None:
+            m.weight.data.fill_(1)
+        if m.bias is not None:
+            m.bias.data.fill_(0)
 
 def reverse(tensor):
 	idx = [i for i in range(tensor.size(0)-1, -1, -1)]
@@ -32,7 +32,8 @@ def reverse(tensor):
 class EncoderVideo_LatentODE(nn.Module):
     def __init__(self, img_size, static_latent_dim=5, dynamic_latent_dim=1, hid_channels = 32, kernel_size = 4, hidden_dim = 256, use_last_gru_hidden=False,
                  bidirectional_gru=True, num_GRU_layers=1, num_encoder_layers=4, num_conv_layers=2, n_samples=100, 
-                 netE_num_downsampling_sp=3, netE_num_downsampling_gl=1, spatial_code_ch=256, global_code_ch=512, sampling_type="Static"):
+                 netE_num_downsampling_sp=3, netE_num_downsampling_gl=1, spatial_code_ch=256, global_code_ch=512, sampling_type="Static", n_frames_interpolate=2,
+                 n_frames_extrapolate=2):
 
         # 3dShapes_dataset: static_latent_dim=5, dynamic_latent_dim=1, hid_channels = 32, kernel_size = 4, hidden_dim = 256
         # fashion_dataset: static_latent_dim=12, dynamic_latent_dim=4,, hid_channels = 32, kernel_size = 4, hidden_dim = 256
@@ -50,6 +51,8 @@ class EncoderVideo_LatentODE(nn.Module):
         self.bidirectional_gru = bidirectional_gru
         self.n_samples = n_samples
         self.sampling_type = sampling_type
+        self.n_frames_interp = n_frames_interpolate
+        self.n_frames_ext = n_frames_extrapolate
 
         # channels for encoder, ODE, init decoder
         resize = 2 ** netE_num_downsampling_sp
@@ -61,7 +64,7 @@ class EncoderVideo_LatentODE(nn.Module):
         self.swapae_encoder = StyleGAN2ResnetEncoder(netE_num_downsampling_sp=netE_num_downsampling_sp, 
                 netE_num_downsampling_gl=netE_num_downsampling_gl,
                 spatial_code_ch=spatial_code_ch,
-                global_code_ch=global_code_ch) # TODO: configure this
+                global_code_ch=global_code_ch) 
 
         
         ##### ODE Encoder
@@ -118,10 +121,7 @@ class EncoderVideo_LatentODE(nn.Module):
         self.lin = nn.Linear(spatial_code_ch * (img_size[0] // resize) * (img_size[1] // resize), hidden_dim)
         self.mu_gen_d = nn.Linear(hidden_dim, self.dynamic_latent_dim)
 
-        # Fully connected layers for mean and variance
-        # self.mu_logvar_gen_s = nn.Linear(global_code_ch, self.static_latent_dim)
-
-        # self.apply(kaiming_init)
+        self.apply(kaiming_init)
 
     def reparametrize(self,mu, logvar):
         std = logvar.div(2).exp()
@@ -133,19 +133,19 @@ class EncoderVideo_LatentODE(nn.Module):
         T = x.size(1)
 
         xi = x.permute(1, 0, 2, 3, 4).contiguous() # T x B x C x H x W
-        xi = xi.reshape(T*batch_size, x.shape[2], x.shape[3], x.shape[4]) # T*B x C x H x W
-        xi, xi_gl = self.swapae_encoder(xi) # xi: T*B x spatial_code_ch x H' x W', xi_gl: T*B x global_code_ch
-        xi = xi.view(T, batch_size, xi.shape[1], xi.shape[2], xi.shape[3]) # T x B x D' x H' x W'
-        # xi_gl = xi_gl.view(T, batch_size, -1)  # T x B x D'
 
+        # xi = xi.reshape(T*batch_size, x.shape[2], x.shape[3], x.shape[4]) # T*B x C x H x W
+        # xi, _ = self.swapae_encoder(xi) # xi: T*B x spatial_code_ch x H' x W'
+        # xi = xi.view(T, batch_size, xi.shape[1], xi.shape[2], xi.shape[3]) # T x B x D' x H' x W'
 
-        # all_xi, all_xi_gl = [], []
-        # for sub_x in xi:
-        #     sub_a, sub_b = self.swapae_encoder(sub_x)
-        #     all_xi.append(sub_a)
-        #     all_xi_gl.append(sub_b)
+        # TODO: think about normalization should be in which dimention
+        all_xi = []
+        for sub_x in xi:
+            sub_a, _ = self.swapae_encoder(sub_x)
+            all_xi.append(sub_a)
+            # all_xi_gl.append(sub_b)
         
-        # xi = torch.stack(all_xi, 0) # T x B x D' x H' x W'
+        xi = torch.stack(all_xi, 0) # T x B x D' x H' x W'
         # xi_gl = torch.stack(all_xi_gl, 0) # T x B x D'
 
 
@@ -155,15 +155,14 @@ class EncoderVideo_LatentODE(nn.Module):
         mask = torch.zeros(T, 1) # TODO: make mask
         # TODO: differenciate between interp and exterp when sampling
         if self.sampling_type == "Interpolate":
-            inds = np.random.choice(np.arange(1, T-1), min(self.n_samples, T) - 4, replace=False)
+            inds = np.random.choice(np.arange(1, T-1), min(self.n_samples, T) - 2 - self.n_frames_interp, replace=False)
             mask[inds, :] = 1
             mask[0, :] = 1
             mask[T-1, :] = 1
         elif self.sampling_type == "Extrapolate":
             #inds = np.random.choice(T-1, min(self.n_samples, T) - 1, replace=False)
-            inds = np.arange(0, T-1)
+            inds = np.arange(0, T-self.n_frames_ext)
             mask[inds, :] = 1
-            #mask[0, :] = 1
         elif self.sampling_type == "Static":
             mask = torch.ones(T, 1)
         mask = mask.unsqueeze(0).repeat(batch_size, 1, 1).to(xi.device).to(torch.float64) # B x T x 1
