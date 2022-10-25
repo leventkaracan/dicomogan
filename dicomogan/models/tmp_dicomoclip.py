@@ -272,7 +272,8 @@ class DiCoMOGANCLIP(pl.LightningModule):
         frame_rep_txt_mismatched = (txt_feat_mismatch, video_dynamics, None) # T*B x D1+D2
 
         # predict latents delta
-        mean_inversion = inversions_tf.mean(0, keepdims=True) # 1 x B x 18 x 512
+        ind = np.random.randint(T)
+        mean_inversion = inversions_tf[ind:ind+1]# 1 x B x 18 x 512
         src_inversion_tf = mean_inversion.repeat(T, 1, 1, 1)
         src_inversion = src_inversion_tf.reshape(T*bs, n_channels, dim)
         w_latents = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, *frame_rep)
@@ -433,11 +434,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         ret['inverted_image'] = self.log_videos_as_imgs(inverted_vid_bf)  
         ret['inverted_image_image'] = self.log_videos_as_imgs(inverted_vid_bf)
 
-        C, H, W = ret['real_image'].shape[1:]
-            # TODO: create gif instead of frames 
-        if self.global_step == 0:
-            self.log_gif(vid_bf.permute(1,0,2,3,4), range=(0, 1), name='val/real_gif')
-            self.log_gif(inverted_vid_bf.permute(1,0,2,3,4), range=(0, 1), name='val/inverted_gif')           
+        C, H, W = ret['real_image'].shape[1:]   
         
         ret = self.downsample_log(ret)
         # log gifs
