@@ -54,6 +54,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         self.n_critic = n_critic
         self.frame_log_size = frame_log_size
         self.video_length = video_length
+        self.downsample_video_size = video_ecnoder_config.params.img_size
 
         self.delta_inversion_weight = delta_inversion_weight
         self.l2_latent_eps = l2_latent_eps
@@ -179,7 +180,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         ts = ts - ts[0]
 
         # downsample res for vae TODO: experiment with downsampling the resolution much more/ No downsampling
-        vid_rs = nn.functional.interpolate(video_sample, size=(256//2, 192//2),  mode="bicubic", align_corners=False) # T*B x C x H//2 x W//2 
+        vid_rs = nn.functional.interpolate(video_sample, size=self.downsample_video_size,  mode="bicubic", align_corners=False) # T*B x C x H//2 x W//2 
         vid_rs_tf = vid_rs.view(T, bs, ch, vid_rs.shape[2], vid_rs.shape[3])
         vid_rs_bf = vid_rs_tf.permute(1,0,2,3,4).contiguous() # B x T x C x H//2 x W//2
 
@@ -190,9 +191,8 @@ class DiCoMOGANCLIP(pl.LightningModule):
         txt_feat.requires_grad = False
 
         # vae encode frames
-        zs, zd, mu_logvar_s, mu_logvar_d = self.bVAE_enc(vid_rs_bf, ts)
-        video_style = zs
-        video_dynamics = zd
+        _, zd, _, _ = self.bVAE_enc(vid_rs_bf, ts)
+        video_dynamics = zd  # T * B x D
                                
 
         # frame rep (video_style, video_content, dynamics)
@@ -227,8 +227,6 @@ class DiCoMOGANCLIP(pl.LightningModule):
         inversions_bf = batch['inversion'] # B, T x n_layers x D
         bs, T, n_channels, dim = inversions_bf.shape
         inversions_tf = inversions_bf.permute(1, 0, 2, 3)
-        # inversions = inversions_tf.contiguous().reshape(T * bs, n_channels, dim) # T * B x n_layers x D
-        # inversions.requires_grad = False
 
         inverted_vid_bf = batch['inverted_img'] # B x T x ch x H x W -- range [0, 1]
         inverted_vid_tf = inverted_vid_bf.permute(1,0,2,3,4) # T x B x C x H x W 
@@ -236,9 +234,8 @@ class DiCoMOGANCLIP(pl.LightningModule):
         inverted_vid_norm = inverted_vid * 2 - 1 # range [-1, 1] to pass to the generator and disc
         
 
-        # downsample res for vae TODO: experiment with downsampling the resolution much more/ No downsampling
-        vid_rs = nn.functional.interpolate(video_sample, scale_factor=0.5, mode="bicubic", align_corners=False, recompute_scale_factor=True) # T*B x C x H//2 x W//2 
-        vid_rs_tf = vid_rs.view(T, bs, ch, int(height*0.5),int(width*0.5) )
+        vid_rs = nn.functional.interpolate(video_sample, size=self.downsample_video_size,  mode="bicubic", align_corners=False) # T*B x C x H//2 x W//2 
+        vid_rs_tf = vid_rs.view(T, bs, ch, vid_rs.shape[2], vid_rs.shape[3])
         vid_rs_bf = vid_rs_tf.permute(1,0,2,3,4).contiguous() # B x T x C x H//2 x W//2
 
         # encode text
@@ -276,8 +273,8 @@ class DiCoMOGANCLIP(pl.LightningModule):
         reconstruction = self.stylegan_G(w_latents) # T*B x 3 x H x W
         imgs_txt_mismatched = self.stylegan_G(w_latents_txt_mismatched) # T*B x 3 x H x W
 
-        reconstruction_inp_res = nn.functional.interpolate(reconstruction, size=(256, 192), mode="bicubic", align_corners=False)
-        imgs_txt_mismatched_inp_res = nn.functional.interpolate(imgs_txt_mismatched, size=(256, 192), mode="bicubic", align_corners=False)
+        reconstruction_inp_res = nn.functional.interpolate(reconstruction, size=(height, width), mode="bicubic", align_corners=False)
+        imgs_txt_mismatched_inp_res = nn.functional.interpolate(imgs_txt_mismatched, size=(height, width), mode="bicubic", align_corners=False)
 
 
 
@@ -378,10 +375,9 @@ class DiCoMOGANCLIP(pl.LightningModule):
         inverted_vid = inverted_vid_tf.contiguous().view(T * bs, ch, height, width) # T*B x C x H x W 
         inverted_vid_norm = inverted_vid * 2 - 1 # range [-1, 1] to pass to the generator and disc
 
-        # downsample res for vae
-        vid_rs_full = nn.functional.interpolate(video_sample, scale_factor=0.5, mode="bicubic", align_corners=False, recompute_scale_factor=True)
-        vid_rs = vid_rs_full.view(T, bs, ch, int(height*0.5),int(width*0.5) )
-        vid_rs = vid_rs.permute(1,0,2,3,4) #  B x T x C x H//2 x W//2
+        vid_rs = nn.functional.interpolate(video_sample, size=self.downsample_video_size,  mode="bicubic", align_corners=False) # T*B x C x H//2 x W//2 
+        vid_rs_tf = vid_rs.view(T, bs, ch, vid_rs.shape[2], vid_rs.shape[3])
+        vid_rs_bf = vid_rs_tf.permute(1,0,2,3,4).contiguous() # B x T x C x H//2 x W//2
 
         # encode text
         txt_feat = self.clip_encode_text(input_desc)  # B x D
@@ -392,7 +388,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         txt_feat.requires_grad = False
 
         # vae encode frames
-        zs, zd, mu_logvar_s, mu_logvar_d = self.bVAE_enc(vid_rs, ts)
+        zs, zd, mu_logvar_s, mu_logvar_d = self.bVAE_enc(vid_rs_bf, ts)
         video_style = zs
         video_dynamics = zd
 

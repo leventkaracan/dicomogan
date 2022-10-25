@@ -8,20 +8,20 @@ from dicomogan.vidode import Encoder, Encoder_z0_ODE_ConvGRU, create_convnet, OD
 from dicomogan.models.swapae_networks.encoder import StyleGAN2ResnetEncoder
 # from torchdiffeq import odeint_adjoint as odeint
 
-def kaiming_init(m):
-    if isinstance(m, (nn.Linear, nn.Conv2d)):
-        nn.init.kaiming_normal_(m.weight)
-        if m.bias is not None:
-            m.bias.data.fill_(0)
-    elif isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d)):
-        m.weight.data.fill_(1)
-        if m.bias is not None:
-            m.bias.data.fill_(0)
-    elif isinstance(m, (nn.InstanceNorm1d, nn.InstanceNorm2d)):
-        if m.weight is not None:
-            m.weight.data.fill_(1)
-        if m.bias is not None:
-            m.bias.data.fill_(0)
+# def kaiming_init(m):
+#     if isinstance(m, (nn.Linear, nn.Conv2d)):
+#         nn.init.kaiming_normal_(m.weight)
+#         if m.bias is not None:
+#             m.bias.data.fill_(0)
+#     elif isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d)):
+#         m.weight.data.fill_(1)
+#         if m.bias is not None:
+#             m.bias.data.fill_(0)
+#     elif isinstance(m, (nn.InstanceNorm1d, nn.InstanceNorm2d)):
+#         if m.weight is not None:
+#             m.weight.data.fill_(1)
+#         if m.bias is not None:
+#             m.bias.data.fill_(0)
 
 def reverse(tensor):
 	idx = [i for i in range(tensor.size(0)-1, -1, -1)]
@@ -121,7 +121,7 @@ class EncoderVideo_LatentODE(nn.Module):
         self.lin = nn.Linear(spatial_code_ch * (img_size[0] // resize) * (img_size[1] // resize), hidden_dim)
         self.mu_gen_d = nn.Linear(hidden_dim, self.dynamic_latent_dim)
 
-        self.apply(kaiming_init)
+        # self.apply(kaiming_init)
 
     def reparametrize(self,mu, logvar):
         std = logvar.div(2).exp()
