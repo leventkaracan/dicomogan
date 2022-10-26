@@ -35,6 +35,7 @@ class VideoDataFashion(data.Dataset):
                     crop=None, size=None, onehot=True,
                     irregular_sampling = True,
                     skip_frames = 0,
+                    num_gpus=1,
                     attribute_stats = 'data/fashion/attributes_stats.yaml'):
                     
         super(VideoDataFashion, self).__init__()
@@ -52,7 +53,7 @@ class VideoDataFashion(data.Dataset):
         self.img_root = img_root
 
         if not isinstance(video_list, list):
-            self.video_list = open(video_list).readlines()
+            self.video_list = list(set(open(video_list).readlines()))
         else:
             self.video_list = set()
             for lst in video_list:
@@ -67,6 +68,7 @@ class VideoDataFashion(data.Dataset):
         self.attribute = attribute
         self.onehot = onehot
         self.irregular_sampling = irregular_sampling
+        self.num_gpus = num_gpus
         if self.attribute is not None:
             self.attribute_stats = self.load_yaml(attribute_stats)
 
@@ -123,6 +125,8 @@ class VideoDataFashion(data.Dataset):
             return yaml.safe_load(f)
 
     def __getitem__(self, index):
+        # adjust index accoridng to num of gpus 
+        index = index // self.num_gpus + (index % self.num_gpus) * len(self) // self.num_gpus
         return_list = {}
         # load text 
         rnd_txt = np.random.randint(len(self.desc_paths[index]))
@@ -182,6 +186,7 @@ class VideoDataFashion(data.Dataset):
             return_list['inversion'] = W
         
         return_list['sampleT'] = sampleT
+        return_list['index'] = index
 
         return return_list
 
@@ -198,7 +203,9 @@ class VideoDataFashion(data.Dataset):
 
     def get_inversion(self, inversion_path):
         w_vector = torch.load(inversion_path, map_location='cpu')
-        assert (w_vector.shape == (1, 18, 512)), "Inverted vector has incorrect shape"
+        if w_vector.shape[0] != 1:
+            w_vector = w_vector.unsqueeze(0)
+        assert (w_vector.shape == (1, 18, 512)), f"Inverted vector has incorrect shape {w_vector.shape}"
         return w_vector
     
     def __len__(self):

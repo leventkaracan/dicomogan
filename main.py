@@ -1,3 +1,15 @@
+# hard coded for now 
+from random import shuffle
+import sys
+paths, ainaz_paths = [], []
+for path in sys.path:
+    if 'ajamshidi' in path:
+        ainaz_paths.append(path)
+    else:
+        paths.append(path)
+sys.path = paths
+
+
 import matplotlib
 matplotlib.use('Agg')
 	
@@ -5,7 +17,7 @@ import warnings
 warnings.filterwarnings("ignore")
 import os
 os.environ['WANDB_START_METHOD'] = 'thread'
-os.environ['TORCH_DISTRIBUTED_DEBUG'] = 'INFO'
+# os.environ['TORCH_DISTRIBUTED_DEBUG'] = 'INFO'
 import torch
 import argparse, os, sys, datetime, glob, importlib
 from omegaconf import OmegaConf # Yaml hierarcichal config
@@ -17,6 +29,7 @@ from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
 
 import torchvision
 from torch.utils.data import random_split, DataLoader, Dataset
+# from torch.utils.data.distributed import DistributedSampler
 import pytorch_lightning as pl
 from pytorch_lightning import seed_everything
 from pytorch_lightning.trainer import Trainer
@@ -26,7 +39,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from experiments_utils import *
 from pytorch_lightning.plugins import DDPPlugin
-from torch.utils.data import DistributedSampler
+from torch.utils.data.distributed import DistributedSampler
 import wandb
 
 def get_parser(**parser_kwargs):
@@ -206,18 +219,19 @@ class DataModuleFromConfig(pl.LightningDataModule):
                 self.datasets[k] = WrappedDataset(self.datasets[k])
 
     def _train_dataloader(self):
+        train_sampler = DistributedSampler(self.datasets["train"], shuffle=False, drop_last=True)
         dataloader = DataLoader(self.datasets["train"], batch_size=self.batch_size,
-                          num_workers=self.num_workers, shuffle=False, drop_last=True) # ATTENTION: shuffle should stay false to consistent sampling
+                          num_workers=self.num_workers, shuffle=False, drop_last=True, sampler=train_sampler) # ATTENTION: shuffle should stay false to consistent sampling
         return dataloader
 
     def _val_dataloader(self):
         return DataLoader(self.datasets["validation"],
                           batch_size=self.batch_size,
-                          num_workers=self.num_workers)
+                          num_workers=self.num_workers, shuffle=False, sampler=DistributedSampler(self.datasets["validation"], shuffle=False))
 
     def _test_dataloader(self):
         return DataLoader(self.datasets["test"], batch_size=self.batch_size, 
-                          num_workers=self.num_workers)
+                          num_workers=self.num_workers, shuffle=False, sampler=DistributedSampler(self.datasets["test"], shuffle=False))
 
 
 class SetupCallback(Callback):
@@ -762,17 +776,6 @@ if __name__ == "__main__":
         #                                      profiler=profiler)
         
         trainer = Trainer.from_argparse_args(trainer_opt, **trainer_kwargs, strategy=DDPPlugin(find_unused_parameters=False))
-
-        # data
-        data = instantiate_from_config(config.data)
-        # NOTE according to https://pytorch-lightning.readthedocs.io/en/latest/datamodules.html
-        # calling these ourselves should not be necessary but it is.
-        # lightning still takes care of proper multiprocessing though
-
-        # load data according to config into training and testing, and wrap them with the model
-        data.prepare_data()
-        data.setup()
-
         # configure learning rate
         bs, base_lr = config.data.params.batch_size, config.model.base_learning_rate
         print("Batch size:", bs)
@@ -786,6 +789,17 @@ if __name__ == "__main__":
         model.learning_rate = accumulate_grad_batches * ngpu * bs * base_lr
         print("Setting learning rate to {:.2e} = {} (accumulate_grad_batches) * {} (num_gpus) * {} (batchsize) * {:.2e} (base_lr)".format(
             model.learning_rate, accumulate_grad_batches, ngpu, bs, base_lr))
+        
+        # data
+        data = instantiate_from_config(config.data, num_gpus=ngpu)
+        # NOTE according to https://pytorch-lightning.readthedocs.io/en/latest/datamodules.html
+        # calling these ourselves should not be necessary but it is.
+        # lightning still takes care of proper multiprocessing though
+
+        # load data according to config into training and testing, and wrap them with the model
+        data.prepare_data()
+        data.setup()
+
 
         # allow checkpointing via USR1
         def melk(*args, **kwargs):
@@ -808,7 +822,6 @@ if __name__ == "__main__":
         # model unlearnable params 
         print("Model non-learnable params:",  sum(p.numel() for p in model.parameters() if not p.requires_grad))
         # run
-        loader = data._train_dataloader()
         if opt.train:
             try:
                 trainer.fit(model, data)

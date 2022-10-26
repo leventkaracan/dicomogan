@@ -88,7 +88,7 @@ data:
         inverted_img_root : /scratch/users/abond19/datasets/inverted_fashion_dataset
         inversion_root: /scratch/users/abond19/datasets/w+_fashion_dataset/fashion/PTI
         skip_frames : 5
-        n_sampled_frames : 10
+        n_sampled_frames : 6
         irregular_sampling : True
         batch_size : 2 #MUST match batch size 
         # crop : [512, 384]

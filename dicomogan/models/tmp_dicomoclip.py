@@ -166,7 +166,8 @@ class DiCoMOGANCLIP(pl.LightningModule):
         print(f"Restored from {path}")
 
     def on_train_epoch_start(self,):
-            self.trainer.train_dataloader.dataset.datasets.reset()
+        print("train_datasete", len(self.trainer.train_dataloader.dataset.datasets))
+        self.trainer.train_dataloader.dataset.datasets.reset()
 
     def video_dynamic_rep(self, vid_bf, ts, mask):
         """
@@ -228,7 +229,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         video_sample_norm = video_sample * 2 - 1 # range [-1, 1] to pass to the generator and disc
 
         sampleT = batch['sampleT']  # B x T 
-        assert torch.all(sampleT[0] == sampleT[np.random.randint(sampleT.size(0)-1)+1])
+        assert torch.all(sampleT[0] == sampleT[np.random.randint(sampleT.size(0)-1)+1]), f"index: {batch['index']}"
         sampleT = sampleT[0] # B  --assumption: all batch['sampleT'] are the same
         ts = (sampleT) / self.video_length
         ts = ts - ts[0]
@@ -272,8 +273,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         frame_rep_txt_mismatched = (txt_feat_mismatch, video_dynamics, None) # T*B x D1+D2
 
         # predict latents delta
-        ind = np.random.randint(T)
-        mean_inversion = inversions_tf[ind:ind+1]# 1 x B x 18 x 512
+        mean_inversion = inversions_tf.mean(0, keepdims=True) # 1 x B x 18 x 512
         src_inversion_tf = mean_inversion.repeat(T, 1, 1, 1)
         src_inversion = src_inversion_tf.reshape(T*bs, n_channels, dim)
         w_latents = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, *frame_rep)
@@ -289,14 +289,14 @@ class DiCoMOGANCLIP(pl.LightningModule):
 
         # calculate losses
         # TODO: URGENT: experiment working on the full resolution
-        reconstruction_loss = self.rec_loss(reconstruction_inp_res, inverted_vid_norm)
+        reconstruction_loss = self.rec_loss(reconstruction_inp_res, video_sample_norm)
 
 
         # latent_loss = self.l2_latent_loss(src_inversion, w_latents) 
         # latent_loss += 2 * self.l2_latent_loss(src_inversion, w_latents_txt_mismatched)
         latent_loss = torch.maximum(self.l2_latent_loss(src_inversion, w_latents) - self.l2_latent_eps / 2, torch.zeros(1).to(src_inversion.device)[0]) 
         latent_loss += torch.maximum(self.l2_latent_loss(src_inversion, w_latents_txt_mismatched) - self.l2_latent_eps, torch.zeros(1).to(src_inversion.device)[0])
-        vgg_loss = self.criterionVGG(reconstruction_inp_res.contiguous() / 2 + 0.5, inverted_vid.contiguous().detach()).mean()
+        vgg_loss = self.criterionVGG(reconstruction_inp_res.contiguous() / 2 + 0.5, video_sample.contiguous().detach()).mean()
         
         
         # video based losses
@@ -364,13 +364,12 @@ class DiCoMOGANCLIP(pl.LightningModule):
         return a dictionary of tensors in the range [-1, 1]
         """
         ret = dict()
-
         input_desc = batch['raw_desc'] # B
         vid_bf = batch['real_img'] # B x T x C x H x W 
         inverted_vid_bf = batch['inverted_img'] # B x T x ch x H x W -- range [0, 1]
         
         sampleT = batch['sampleT']  # B x T 
-        assert torch.all(sampleT[0] == sampleT[np.random.randint(sampleT.size(0)-1)+1])
+        assert torch.all(sampleT[0] == sampleT[np.random.randint(sampleT.size(0)-1)+1]), f"index: {batch['index']}"
         sampleT = sampleT[0] # B  --assumption: all batch['sampleT'] are the same
         ts = (sampleT) / self.video_length
         ts = ts - ts[0]
@@ -431,6 +430,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
 
 
         ret['real_image'] = self.log_videos_as_imgs(vid_bf) 
+        ret['real_image_image'] = self.log_videos_as_imgs(vid_bf) 
         ret['inverted_image'] = self.log_videos_as_imgs(inverted_vid_bf)  
         ret['inverted_image_image'] = self.log_videos_as_imgs(inverted_vid_bf)
 
@@ -438,7 +438,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         
         ret = self.downsample_log(ret)
         # log gifs
-        video_lst = ['x_recon_mean', 'x_mismatch_mean', 'x_swapped_dynamics', 'x_recon_first', 'x_recon_last', 'inverted_image']
+        video_lst = ['real_image', 'x_recon_mean', 'x_mismatch_mean', 'x_swapped_dynamics', 'x_recon_first', 'x_recon_last', 'inverted_image']
         
         ret_imgs = {}
         for k, v in ret.items():
@@ -468,9 +468,10 @@ class DiCoMOGANCLIP(pl.LightningModule):
                 frame = (np.transpose(frame, (1, 2, 0)) * 255).astype(np.uint8)
                 writer.append_data(frame)
 
-        wandb.log({name: wandb.Video(filename, fps=2, format="gif")})
+        self.trainer.logger.experiment.log(
+                {name: wandb.Video(filename, fps=2, format="gif"), 
+                "global_step":self.global_step})
         os.remove(filename)
-
 
     def configure_optimizers(self):
         lr = self.learning_rate
