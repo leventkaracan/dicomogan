@@ -45,12 +45,14 @@ class DiCoMOGANCLIP(pl.LightningModule):
                     tgt_text = None,
                     n_critic = 1,
                     ckpt_path=None,
+                    content_mode = 'mean_inv',
                     ignore_keys=[], 
                     video_length = 6,
                     frame_log_size=(1024, 512)
                     ):
         super().__init__()
         self.beta = beta
+        self.content_mode = content_mode
         self.scheduler_config = scheduler_config
         self.n_critic = n_critic
         self.frame_log_size = tuple(frame_log_size)
@@ -272,7 +274,12 @@ class DiCoMOGANCLIP(pl.LightningModule):
         frame_rep_txt_mismatched = (txt_feat_mismatch, video_dynamics, None) # T*B x D1+D2
 
         # predict latents delta
-        mean_inversion = inversions_tf.mean(0, keepdims=True) # 1 x B x 18 x 512
+        if self.content_mode == 'mean_inv':
+            mean_inversion = inversions_tf.mean(0, keepdims=True) # 1 x B x 18 x 512
+        else:
+            ind = np.random.randint(T)
+            mean_inversion = inversions_tf[ind:ind+1]
+
         src_inversion_tf = mean_inversion.repeat(T, 1, 1, 1)
         src_inversion = src_inversion_tf.reshape(T*bs, n_channels, dim)
         w_latents = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, *frame_rep)
@@ -398,12 +405,12 @@ class DiCoMOGANCLIP(pl.LightningModule):
         mean_inversion = inversions_tf.mean(0, keepdims=True) # 1 x B x 18 x 512
         ret['x_recon_mean']  = self.sample_frames(frames_dynamics, mean_inversion, txt_feat)
         ret['x_mismatch_mean']  = self.sample_frames(frames_dynamics, mean_inversion, mismatch_txt_feat)
-        # ret['x_recon_mean_image']  = self.sample_frames(frames_dynamics, mean_inversion, txt_feat)
-        # ret['x_mismatch_mean_image']  = self.sample_frames(frames_dynamics, mean_inversion, mismatch_txt_feat)
+        ret['x_recon_mean_image']  = self.sample_frames(frames_dynamics, mean_inversion, txt_feat)
+        ret['x_mismatch_mean_image']  = self.sample_frames(frames_dynamics, mean_inversion, mismatch_txt_feat)
         ret['x_swapped_dynamics']  = self.sample_frames(swapped_frames_dynamics, mean_inversion, txt_feat)
         ret['img_mean_inv'] = self.stylegan_G(mean_inversion[0])
 
-        # to_PIL(ret['x_recon_mean_image']).save('tmp.png')
+        # to_PIL(ret['x_recon_mean_image'][0]).save('tmp.png')
 
         # first frame
         first_inversion = inversions_tf[0:1] # 1 x B x 18 x 512

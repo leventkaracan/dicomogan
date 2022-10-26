@@ -227,11 +227,11 @@ class DataModuleFromConfig(pl.LightningDataModule):
     def _val_dataloader(self):
         return DataLoader(self.datasets["validation"],
                           batch_size=self.batch_size,
-                          num_workers=self.num_workers, shuffle=False, sampler=DistributedSampler(self.datasets["validation"], shuffle=False))
+                          num_workers=self.num_workers, shuffle=False,  drop_last=True, sampler=DistributedSampler(self.datasets["validation"], shuffle=False, drop_last=True))
 
     def _test_dataloader(self):
         return DataLoader(self.datasets["test"], batch_size=self.batch_size, 
-                          num_workers=self.num_workers, shuffle=False, sampler=DistributedSampler(self.datasets["test"], shuffle=False))
+                          num_workers=self.num_workers, shuffle=False,  drop_last=True, sampler=DistributedSampler(self.datasets["test"], shuffle=False, drop_last=True))
 
 
 class SetupCallback(Callback):

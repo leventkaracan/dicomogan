@@ -126,7 +126,7 @@ class VideoDataFashion(data.Dataset):
 
     def __getitem__(self, index):
         # adjust index accoridng to num of gpus 
-        index = index // self.num_gpus + (index % self.num_gpus) * len(self) // self.num_gpus
+        index = (index // self.num_gpus) + (index % self.num_gpus) * ((len(self) // self.num_gpus) // self.batch_size) * self.batch_size
         return_list = {}
         # load text 
         rnd_txt = np.random.randint(len(self.desc_paths[index]))
