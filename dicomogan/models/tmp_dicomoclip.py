@@ -166,7 +166,6 @@ class DiCoMOGANCLIP(pl.LightningModule):
         print(f"Restored from {path}")
 
     def on_train_epoch_start(self,):
-        print("train_datasete", len(self.trainer.train_dataloader.dataset.datasets))
         self.trainer.train_dataloader.dataset.datasets.reset()
 
     def video_dynamic_rep(self, vid_bf, ts, mask):
@@ -399,8 +398,12 @@ class DiCoMOGANCLIP(pl.LightningModule):
         mean_inversion = inversions_tf.mean(0, keepdims=True) # 1 x B x 18 x 512
         ret['x_recon_mean']  = self.sample_frames(frames_dynamics, mean_inversion, txt_feat)
         ret['x_mismatch_mean']  = self.sample_frames(frames_dynamics, mean_inversion, mismatch_txt_feat)
+        # ret['x_recon_mean_image']  = self.sample_frames(frames_dynamics, mean_inversion, txt_feat)
+        # ret['x_mismatch_mean_image']  = self.sample_frames(frames_dynamics, mean_inversion, mismatch_txt_feat)
         ret['x_swapped_dynamics']  = self.sample_frames(swapped_frames_dynamics, mean_inversion, txt_feat)
         ret['img_mean_inv'] = self.stylegan_G(mean_inversion[0])
+
+        # to_PIL(ret['x_recon_mean_image']).save('tmp.png')
 
         # first frame
         first_inversion = inversions_tf[0:1] # 1 x B x 18 x 512

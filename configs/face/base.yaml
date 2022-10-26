@@ -86,13 +86,13 @@ data:
   target: main.DataModuleFromConfig
   params:
     batch_size: 2 # MUST Match batch size in dataset
-    num_workers: 80
+    num_workers: 40
     train:
       target: dicomogan.data.new_video.VideoDataFashion # Changed from data.video.VideoDataFashion to data.new_video.VideoDataFashion
       params:
         video_list: /kuacc/users/abond19/datasets/RAVDESS/train_split.txt
         img_root: /scratch/users/abond19/datasets/RAVDESS/Aligned
-        inverted_img_root : /scratch/users/abond19/datasets/Aligned 
+        inverted_img_root : /scratch/users/abond19/datasets/RAVDESS/Aligned
         inversion_root: /kuacc/users/abond19/datasets/w+_face_dataset
         skip_frames : 5
         n_sampled_frames : 4
@@ -108,7 +108,7 @@ data:
       params:
         video_list: /kuacc/users/abond19/datasets/RAVDESS/test_split.txt
         img_root: /scratch/users/abond19/datasets/RAVDESS/Aligned
-        inverted_img_root : /scratch/users/abond19/datasets/AlignedAligned
+        inverted_img_root : /scratch/users/abond19/datasets/RAVDESS/Aligned
         inversion_root: /kuacc/users/abond19/datasets/w+_face_dataset
         skip_frames : 5
         n_sampled_frames : 10
