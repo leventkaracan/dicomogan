@@ -424,19 +424,19 @@ class DiCoMOGANCLIP(pl.LightningModule):
         ret['x_mismatch_last']  = self.sample_frames(frames_dynamics, last_inversion, mismatch_txt_feat)
         ret['img_last_inv'] = self.stylegan_G(last_inversion[0])
 
-        # interpolation
-        interp_mask = torch.ones(T, 1)
-        interp_mask[[1, 3],:] = 0
-        interp_video_dynamics = self.video_dynamic_rep(vid_bf, ts, mask=interp_mask)
-        interp_frames_dynamics = self.sample_frames_dynamics(interp_video_dynamics, ts)
-        ret['x_interp_mean']  = self.sample_frames(interp_frames_dynamics, mean_inversion, txt_feat)
+        # # interpolation
+        # interp_mask = torch.ones(T, 1)
+        # interp_mask[[1, 3],:] = 0
+        # interp_video_dynamics = self.video_dynamic_rep(vid_bf, ts, mask=interp_mask)
+        # interp_frames_dynamics = self.sample_frames_dynamics(interp_video_dynamics, ts)
+        # ret['x_interp_mean']  = self.sample_frames(interp_frames_dynamics, mean_inversion, txt_feat)
 
-        # extrapolation
-        extra_mask = torch.ones(T, 1)
-        extra_mask[-2:,:] = 0
-        extra_video_dynamics = self.video_dynamic_rep(vid_bf, ts, mask=extra_mask)
-        extra_frames_dynamics = self.sample_frames_dynamics(extra_video_dynamics, ts)
-        ret['x_exterp_mean']  = self.sample_frames(extra_frames_dynamics, mean_inversion, txt_feat)
+        # # extrapolation
+        # extra_mask = torch.ones(T, 1)
+        # extra_mask[-2:,:] = 0
+        # extra_video_dynamics = self.video_dynamic_rep(vid_bf, ts, mask=extra_mask)
+        # extra_frames_dynamics = self.sample_frames_dynamics(extra_video_dynamics, ts)
+        # ret['x_exterp_mean']  = self.sample_frames(extra_frames_dynamics, mean_inversion, txt_feat)
 
 
         ret['real_image'] = self.log_videos_as_imgs(vid_bf) 
@@ -457,7 +457,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
             else:
                 ret_imgs[k] = v
 
-        ret_imgs['real_image_caption'] = '\n'.join([f"{batch['video_name'][i]}: {el}" for i, el in enumerate(batch['raw_desc'])])
+        ret_imgs['real_image_image_caption'] = '\n'.join([f"{batch['video_name'][i]}: {el}" for i, el in enumerate(batch['raw_desc'])])
         return ret_imgs
 
     def downsample_log(self, ret):

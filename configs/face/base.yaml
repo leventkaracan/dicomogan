@@ -19,10 +19,10 @@ model:
     clip_loss_lambda:
       target: dicomogan.models.utils.LambdaScheduler
       params:
-        warm_up_steps: 10000
+        warm_up_steps: 0
         lr_min: 0.01
         lr_max: 1.0
-        max_decay_steps: 30000
+        max_decay_steps: 100000
 
     consistency_lambda:
       target: dicomogan.models.utils.LambdaScheduler
@@ -30,15 +30,15 @@ model:
         warm_up_steps: 0
         lr_min: 0.01
         lr_max: 1.0
-        max_decay_steps: 30000
+        max_decay_steps: 120000
 
     rec_loss_lambda:
       target: dicomogan.models.utils.LambdaScheduler
       params:
-        warm_up_steps: 10000
+        warm_up_steps: 100000
         lr_min: 0.01
         lr_max: 1.0
-        max_decay_steps: 30000
+        max_decay_steps: 200000
     
     video_ecnoder_config:
       target: dicomogan.new_modules.EncoderVideo_LatentODE
@@ -86,16 +86,16 @@ data:
   target: main.DataModuleFromConfig
   params:
     batch_size: 2 # MUST Match batch size in dataset
-    num_workers: 40
+    num_workers: 20
     train:
       target: dicomogan.data.new_video.VideoDataFashion # Changed from data.video.VideoDataFashion to data.new_video.VideoDataFashion
       params:
         video_list: /kuacc/users/abond19/datasets/RAVDESS/train_split.txt
         img_root: /scratch/users/abond19/datasets/RAVDESS/Aligned
-        inverted_img_root : /scratch/users/abond19/datasets/RAVDESS/Aligned
+        inverted_img_root : /scratch/users/abond19/datasets/inverted_face_dataset
         inversion_root: /kuacc/users/abond19/datasets/w+_face_dataset
         skip_frames : 5
-        n_sampled_frames : 4
+        n_sampled_frames : 3
         irregular_sampling : True
         batch_size : 2 #MUST match batch size 
         # crop : [512, 384]
@@ -108,7 +108,7 @@ data:
       params:
         video_list: /kuacc/users/abond19/datasets/RAVDESS/test_split.txt
         img_root: /scratch/users/abond19/datasets/RAVDESS/Aligned
-        inverted_img_root : /scratch/users/abond19/datasets/RAVDESS/Aligned
+        inverted_img_root : /scratch/users/abond19/datasets/inverted_face_dataset
         inversion_root: /kuacc/users/abond19/datasets/w+_face_dataset
         skip_frames : 5
         n_sampled_frames : 10
@@ -123,7 +123,7 @@ data:
 lightning:
   trainer:
     limit_val_batches : 2
-    limit_train_batches : 290 # for 4 gpus 
+    # limit_train_batches : 290 # for 4 gpus 
     replace_sampler_ddp : False
     # precision : 32
 
