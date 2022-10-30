@@ -3,7 +3,7 @@ from torchvision import transforms
 import torch
 import torch.nn.functional as F
 
-from Splice.models.extractor import VitExtractor
+from dicomogan.models.dino_extractor import VitExtractor
 
 
 class SpliceLoss(torch.nn.Module):
