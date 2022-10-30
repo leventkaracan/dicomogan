@@ -288,7 +288,7 @@ class TripleAttributeMapper(nn.Module):
         self.medium_mapping = AttributeMapperSubModule(self.attr_vec_dims, 4, self.use_medium_mapper, self.medium_cut_flag, mod_shape=mod_shape[1], modtype=modtype, num_of_layers=num_of_layers[1])
         self.fine_mapping = AttributeMapperSubModule(self.attr_vec_dims, 10, self.use_fine_mapper, self.fine_cut_flag, mod_shape=mod_shape[2], modtype=modtype, num_of_layers=num_of_layers[2])
     
-    def forward(self, x, attribute_vector1, attribute_vector2, attribute_vector3):
+    def forward(self, x, attribute_vector1, attribute_vector2=None, attribute_vector3=None):
         x_coarse = x[:, :4, :]
         x_medium = x[:, 4:8, :]
         x_fine = x[:, 8:, :]
@@ -297,6 +297,48 @@ class TripleAttributeMapper(nn.Module):
         x_coarse = self.coarse_mapping(x_coarse, [attribute_vector1, attribute_vector2, attribute_vector3])
         x_medium = self.medium_mapping(x_medium, [attribute_vector1, attribute_vector2, attribute_vector3])
         x_fine = self.fine_mapping(x_fine, [attribute_vector1, attribute_vector2, attribute_vector3])
+            
+        output = torch.cat([x_coarse, x_medium, x_fine], dim=1)
+        return output
+
+class AttentionAttributeMapper(nn.Module):
+    def __init__(self,
+                use_coarse_mapper,
+                use_medium_mapper,
+                use_fine_mapper,
+                coarse_cut_flag,
+                medium_cut_flag,
+                fine_cut_flag,
+                attr_vec_dims, 
+                mod_shape = [[1], [1], [1]], 
+                num_of_layers = [5, 5, 5],
+                modtype='mfmod',
+                predict_delta=True):
+        super(AttentionAttributeMapper, self).__init__()
+        self.use_coarse_mapper = np.array(use_coarse_mapper)
+        self.use_medium_mapper = np.array(use_medium_mapper)
+        self.use_fine_mapper = np.array(use_fine_mapper)
+        self.coarse_cut_flag = coarse_cut_flag
+        self.medium_cut_flag = medium_cut_flag
+        self.fine_cut_flag = fine_cut_flag
+
+        self.attr_vec_dims = np.array(attr_vec_dims)
+        self.predict_delta = predict_delta
+        
+        self.coarse_mapping = AttributeMapperSubModule(self.attr_vec_dims, 4, self.use_coarse_mapper, self.coarse_cut_flag, mod_shape=mod_shape[0], modtype=modtype, num_of_layers=num_of_layers[0])
+        self.medium_mapping = AttributeMapperSubModule(self.attr_vec_dims, 4, self.use_medium_mapper, self.medium_cut_flag, mod_shape=mod_shape[1], modtype=modtype, num_of_layers=num_of_layers[1])
+        self.fine_mapping = AttributeMapperSubModule(self.attr_vec_dims, 10, self.use_fine_mapper, self.fine_cut_flag, mod_shape=mod_shape[2], modtype=modtype, num_of_layers=num_of_layers[2])
+    
+    def forward(self, x, conditional_vectors):
+        x_coarse = x[:, :4, :]
+        x_medium = x[:, 4:8, :]
+        x_fine = x[:, 8:, :]
+        
+        coarse_att_vec, mid_att_vec, fine_att_vec = conditional_vectors
+        
+        x_coarse = self.coarse_mapping(x_coarse, [coarse_att_vec, None, None])
+        x_medium = self.medium_mapping(x_medium, [mid_att_vec, None, None])
+        x_fine = self.fine_mapping(x_fine, [fine_att_vec, None, None])
             
         output = torch.cat([x_coarse, x_medium, x_fine], dim=1)
         return output

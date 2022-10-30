@@ -28,10 +28,10 @@ import uuid
 
 class DiCoMOGANCLIP(pl.LightningModule):
     def __init__(self,
-                    beta,
                     video_ecnoder_config,
                     style_mapper_config,
                     stylegan_gen_config,
+                    modulation_network_config,
                     #mapping_config,
                     lambda_vgg,
                     rec_loss_lambda,
@@ -40,6 +40,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
                     consistency_lambda,
                     delta_inversion_weight,
                     l2_latent_eps,
+                    discriminator_config = None,
                     scheduler_config = None,
                     custom_loggers = None,
                     tgt_text = None,
@@ -48,10 +49,16 @@ class DiCoMOGANCLIP(pl.LightningModule):
                     content_mode = 'mean_inv',
                     ignore_keys=[], 
                     video_length = 6,
-                    frame_log_size=(1024, 512)
+                    frame_log_size=(1024, 512),
+                    sampling_type="Static",
+                    n_frames_interpolate=2,
+                    n_frames_extrapolate=2,
                     ):
         super().__init__()
-        self.beta = beta
+
+        self.sampling_type = sampling_type
+        self.n_frames_interp = n_frames_interpolate
+        self.n_frames_ext = n_frames_extrapolate
         self.content_mode = content_mode
         self.scheduler_config = scheduler_config
         self.n_critic = n_critic
@@ -71,8 +78,13 @@ class DiCoMOGANCLIP(pl.LightningModule):
         self.bVAE_enc = instantiate_from_config(video_ecnoder_config) 
         self.style_mapper = instantiate_from_config(style_mapper_config)
         self.stylegan_G = instantiate_from_config(stylegan_gen_config)
+        self.modulation_network = instantiate_from_config(modulation_network_config)
         self.requires_grad(self.stylegan_G, False)
-        self.stylegan_G
+        
+        # temporal discriminator
+        self.temporal_discriminator = None
+        if discriminator_config is not None:
+            self.temporal_discriminator = instantiate_from_config(discriminator_config)
 
         # loss
         self.criterionVGG = LPIPS().eval()
@@ -193,31 +205,48 @@ class DiCoMOGANCLIP(pl.LightningModule):
     def sample_frames_dynamics(self, video_dynamics, ts):
         return self.bVAE_enc.solve_ode(video_dynamics, ts) # T * B x D
 
-    def sample_frames(self, frame_dynamics, mean_inversion, txt_feat):
+    def sample_frames(self, mean_inversion, condition_vector):
         # frame rep (video_style, video_content, dynamics)
         # video_dynamics # T * B x D
         # mean_inv: # 1 x B x 18 x 512
-        # txt_feat: T * B x D
+        # condition_vector: [3 x (T * B x D)]
         bs = mean_inversion.size(1)
-        T = frame_dynamics.size(0) // bs
-        frame_rep = (txt_feat, frame_dynamics, None) # T*B x D1+D2
+        T = condition_vector[0].size(0) // bs
+        # frame_rep = (txt_feat, frame_dynamics, None) # T*B x D1+D2
         src_inversion_tf = mean_inversion.repeat(T, 1, 1, 1)
         src_inversion = src_inversion_tf.reshape(T*bs, src_inversion_tf.shape[-2], src_inversion_tf.shape[-1])
-        w_latents = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, *frame_rep)
+        w_latents = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, condition_vector)
         ret = self.stylegan_G(w_latents)
         return ret
 
 
     def forward(self, vid_bf, sampleT, mean_inversion, txt_feat):
-        # videos reshape
-        ts = (sampleT) / self.video_length
-        ts = ts - ts[0]
-        bs, T, ch, height, width = vid_bf.size()
-        video_dynamics = self.video_dynamic_rep(vid_bf, ts)  # T * B x D 
-        frames_dynamics = self.sample_frames_dynamics(video_dynamics, ts)        
-        ret = self.sample_frames(frames_dynamics, mean_inversion, txt_feat)
-        ret = ret.reshape(T, bs, ret.shape[1], ret.shape[2], ret.shape[3]).permute(1, 0, 2, 3, 4)
-        return ret
+        pass # TODO
+        # # videos reshape
+        # ts = (sampleT) / self.video_length
+        # ts = ts - ts[0]
+        # bs, T, ch, height, width = vid_bf.size()
+        # video_dynamics = self.video_dynamic_rep(vid_bf, ts)  # T * B x D 
+        # frames_dynamics = self.sample_frames_dynamics(video_dynamics, ts)        
+        # ret = self.sample_frames(frames_dynamics, mean_inversion, txt_feat)
+        # ret = ret.reshape(T, bs, ret.shape[1], ret.shape[2], ret.shape[3]).permute(1, 0, 2, 3, 4)
+        # return ret
+
+    def prepare_mask(self, T):
+        mask = torch.zeros(T, 1) 
+        if self.sampling_type == "Interpolate":
+            inds = np.random.choice(np.arange(1, T-1), min(self.n_samples, T) - 2 - self.n_frames_interp, replace=False)
+            mask[inds, :] = 1
+            mask[0, :] = 1
+            mask[T-1, :] = 1
+        elif self.sampling_type == "Extrapolate":
+            #inds = np.random.choice(T-1, min(self.n_samples, T) - 1, replace=False)
+            inds = np.arange(0, T-self.n_frames_ext)
+            mask[inds, :] = 1
+        elif self.sampling_type == "Static":
+            mask = torch.ones(T, 1)
+        
+        return mask
 
     def training_step(self, batch, batch_idx):
         input_desc = batch['raw_desc'] # B
@@ -240,38 +269,38 @@ class DiCoMOGANCLIP(pl.LightningModule):
         bs, T, n_channels, dim = inversions_bf.shape
         inversions_tf = inversions_bf.permute(1, 0, 2, 3)
 
-        inverted_vid_bf = batch['inverted_img'] # B x T x ch x H x W -- range [0, 1]
-        inverted_vid_tf = inverted_vid_bf.permute(1,0,2,3,4) # T x B x C x H x W 
-        inverted_vid = inverted_vid_tf.contiguous().view(T * bs, ch, height, width) # T*B x C x H x W 
-        inverted_vid_norm = inverted_vid * 2 - 1 # range [-1, 1] to pass to the generator and disc
+        # inverted_vid_bf = batch['inverted_img'] # B x T x ch x H x W -- range [0, 1]
+        # inverted_vid_tf = inverted_vid_bf.permute(1,0,2,3,4) # T x B x C x H x W 
+        # inverted_vid = inverted_vid_tf.contiguous().view(T * bs, ch, height, width) # T*B x C x H x W 
+        # inverted_vid_norm = inverted_vid * 2 - 1 # range [-1, 1] to pass to the generator and disc
         
-
-        vid_rs = nn.functional.interpolate(video_sample, size=self.downsample_video_size,  mode="bicubic", align_corners=False) # T*B x C x H//2 x W//2 
-        vid_rs_tf = vid_rs.view(T, bs, ch, vid_rs.shape[2], vid_rs.shape[3])
-        vid_rs_bf = vid_rs_tf.permute(1,0,2,3,4).contiguous() # B x T x C x H//2 x W//2
-
         # encode text
         txt_feat = self.clip_encode_text(input_desc)  # B x D
+        txt_feat_tf = txt_feat.unsqueeze(0).repeat(T, 1, 1)
+        txt_feat_tb = txt_feat_tf.contiguous().view(T*bs, -1)
+        txt_feat = txt_feat_tb
 
-        # repeat text features 
-        txt_feat_tf = txt_feat.unsqueeze(0).repeat(T, 1, 1) # T x B x D
-        txt_feat = txt_feat_tf.contiguous().view(T*bs, -1)  # T*B x D
-        txt_feat.requires_grad = False
+        # extract frame features
+        ind = np.random.randint(T)
+        frame_feat = self.clip_loss.encode_images(vid_tf[ind] * 2 - 1) # B x D
+        zF_tf = frame_feat.unsqueeze(0).repeat(T, 1, 1)
+        zF_tb = zF_tf.contiguous().view(T*bs, -1)
+        frame_video_style = zF_tb 
 
         # vae encode frames
-        video_dynamics = self.bVAE_enc(vid_rs_bf, ts)
+        rep_video_dynamics = self.video_dynamic_rep(vid_bf, ts, mask=self.prepare_mask(T)) 
+        frame_dynamics = self.sample_frames_dynamics(rep_video_dynamics, ts) # T * B x D x H' x W'
+        frame_dynamics = frame_dynamics.permute(0, 2, 3, 1).contiguous().view(T*bs, -1, frame_dynamics.shape[1]) # T * B x H' * W' x D
                                
         total_loss = 0
         vgg_loss = 0 
-        beta_vae_loss = 0
-        G_loss = 0
 
         # roll batch-wise
         txt_feat_mismatch, _ = self.preprocess_text_feat(txt_feat, mx_roll=2) # T*B x D2
         
         # frame rep (video_style, video_content, dynamics)
-        frame_rep = (txt_feat, video_dynamics, None) # T*B x D1+D2
-        frame_rep_txt_mismatched = (txt_feat_mismatch, video_dynamics, None) # T*B x D1+D2
+        frame_rep = torch.cat((txt_feat.unsqueeze(1), frame_video_style.unsqueeze(1), frame_dynamics), 1) # T*B x D1+D2
+        frame_rep_txt_mismatched = torch.cat((txt_feat_mismatch.unsqueeze(1), frame_video_style.unsqueeze(1), frame_dynamics), 1) # T*B x D1+D2
 
         # predict latents delta
         if self.content_mode == 'mean_inv':
@@ -282,8 +311,11 @@ class DiCoMOGANCLIP(pl.LightningModule):
 
         src_inversion_tf = mean_inversion.repeat(T, 1, 1, 1)
         src_inversion = src_inversion_tf.reshape(T*bs, n_channels, dim)
-        w_latents = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, *frame_rep)
-        w_latents_txt_mismatched = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, *frame_rep_txt_mismatched)
+
+        conditional_vector = self.modulation_network(frame_rep)
+        conditional_vector_mismatched = self.modulation_network(frame_rep_txt_mismatched)
+        w_latents = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, conditional_vector)
+        w_latents_txt_mismatched = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, conditional_vector_mismatched)
 
         reconstruction = self.stylegan_G(w_latents) # T*B x 3 x H x W
         imgs_txt_mismatched = self.stylegan_G(w_latents_txt_mismatched) # T*B x 3 x H x W
@@ -295,7 +327,9 @@ class DiCoMOGANCLIP(pl.LightningModule):
 
         # calculate losses
         # TODO: URGENT: experiment working on the full resolution
-        reconstruction_loss = self.rec_loss(reconstruction_inp_res, video_sample_norm)
+        reconstruction_loss = 0
+        if self.global_step == 0 or self.rec_loss_lambda(self.global_step) > 0:
+            reconstruction_loss = self.rec_loss(reconstruction_inp_res, video_sample_norm)
 
 
         # latent_loss = self.l2_latent_loss(src_inversion, w_latents) 
@@ -324,12 +358,16 @@ class DiCoMOGANCLIP(pl.LightningModule):
         imgs_txt_mismatched_inp_res_bf = imgs_txt_mismatched_inp_res_tf.permute(1, 0, 2, 3, 4).contiguous()   # B x T x C x H W 
 
         # directional loss
-        directional_clip_loss = self.clip_loss.directional_loss(vid_norm_bf, txt_feat_bf, imgs_txt_mismatched_inp_res_bf, txt_feat_mismatch_bf, self.global_step, video=True)
+        directional_clip_loss = 0
+        if self.global_step == 0 or self.clip_loss_lambda(self.global_step) > 0:
+            # TODO: should we use vid_norm_bf or the inversion? 
+            directional_clip_loss = self.clip_loss.directional_loss(vid_norm_bf, txt_feat_bf, imgs_txt_mismatched_inp_res_bf, txt_feat_mismatch_bf, self.global_step, video=True)
 
         # consistency loss
         consistency_loss = 0
-        consistency_loss = self.clip_loss.consistency_loss(reconstruction_bf)
-        consistency_loss += self.clip_loss.consistency_loss(imgs_txt_mismatched_bf)
+        if self.global_step == 0 or self.consistency_lambda(self.global_step) > 0:
+            consistency_loss = self.clip_loss.consistency_loss(reconstruction_bf)
+            consistency_loss += self.clip_loss.consistency_loss(imgs_txt_mismatched_bf)
 
         # lambdas
         self.log("lambda/consistency_loss", self.consistency_lambda(self.global_step), prog_bar=False, logger=True, on_step=False, on_epoch=True)
@@ -380,56 +418,84 @@ class DiCoMOGANCLIP(pl.LightningModule):
         ts = (sampleT) / self.video_length
         ts = ts - ts[0]
 
+
+        bs, T, ch, height, width = vid_bf.size()
+        vid_tf = vid_bf.permute(1,0,2,3,4) # T x B x C x H x W 
+        video_sample = vid_tf.contiguous().view(T * bs, ch, height, width) # T*B x C x H x W // range [0,1]
+        vid_rs = nn.functional.interpolate(video_sample, size=self.downsample_video_size,  mode="bicubic", align_corners=False) # T*B x C x H//2 x W//2 
+        vid_rs_tf = vid_rs.view(T, bs, ch, vid_rs.shape[2], vid_rs.shape[3])
+        vid_rs_bf = vid_rs_tf.permute(1,0,2,3,4).contiguous() # B x T x C x H//2 x W//2
+
         # inversions reshape
         inversions_bf = batch['inversion'] # B, T x n_layers x D
         bs, T, n_channels, dim = inversions_bf.shape
         inversions_tf = inversions_bf.permute(1, 0, 2, 3)
         
-
         # encode text
         txt_feat = self.clip_encode_text(input_desc)  # B x D
+        txt_feat_tf = txt_feat.unsqueeze(0).repeat(T, 1, 1)
+        txt_feat_tb = txt_feat_tf.contiguous().view(T*bs, -1)
+        txt_feat = txt_feat_tb
 
-        # repeat text features 
-        txt_feat_tf = txt_feat.unsqueeze(0).repeat(T, 1, 1) # T x B x D
-        txt_feat = txt_feat_tf.contiguous().view(T*bs, -1)  # T*B x D
-        mismatch_txt_feat, _ = self.preprocess_text_feat(txt_feat, mx_roll=2)
+        # extract frame features
+        ind = np.random.randint(T)
+        frame_feat = self.clip_loss.encode_images(vid_tf[ind] * 2 - 1) # B x D
+        zF_tf = frame_feat.unsqueeze(0).repeat(T, 1, 1)
+        zF_tb = zF_tf.contiguous().view(T*bs, -1)
+        frame_video_style = zF_tb 
 
+        ###### static ########  
+        # vae encode frames
+        rep_video_dynamics = self.video_dynamic_rep(vid_rs_bf, ts, mask=self.prepare_mask(T)) 
+        frame_dynamics = self.sample_frames_dynamics(rep_video_dynamics, ts) # T * B x D x H' x W'
+        frame_dynamics = frame_dynamics.permute(0, 2, 3, 1).contiguous().view(T*bs, -1, frame_dynamics.shape[1]) # T * B x H' * W' x D
+                               
+
+        # roll batch-wise
+        txt_feat_mismatch, _ = self.preprocess_text_feat(txt_feat, mx_roll=2) # T*B x D2
+        frame_dynamics_swapped = torch.roll(frame_dynamics.view(T, bs, -1, frame_dynamics.shape[-1]).contiguous(), 1, dims=1).view(T*bs, -1, frame_dynamics.shape[-1]) 
         
-        ###### static ########
-        rep_mask = torch.ones(T, 1)
-        rep_video_dynamics = self.video_dynamic_rep(vid_bf, ts, mask=rep_mask)
-        frames_dynamics = self.sample_frames_dynamics(rep_video_dynamics, ts)
-        swapped_frames_dynamics = torch.roll(frames_dynamics.view(T, bs, -1), 1, dims=1).view(T*bs, -1)
+        # frame rep (video_style, video_content, dynamics)
+        frame_rep = torch.cat((txt_feat.unsqueeze(1), frame_video_style.unsqueeze(1), frame_dynamics), 1) # T*B x D1+D2
+        frame_rep_txt_mismatched = torch.cat((txt_feat_mismatch.unsqueeze(1), frame_video_style.unsqueeze(1), frame_dynamics), 1) # T*B x D1+D2
+        frame_rep_dynamics_swapped= torch.cat((txt_feat.unsqueeze(1), frame_video_style.unsqueeze(1), frame_dynamics_swapped), 1) # T*B x D1+D2
         
+        conditional_vector = self.modulation_network(frame_rep)
+        conditional_vector_mismatched = self.modulation_network(frame_rep_txt_mismatched)
+        conditional_vector_dynamic_swapper= self.modulation_network(frame_rep_dynamics_swapped)
+
         # mean frame
         mean_inversion = inversions_tf.mean(0, keepdims=True) # 1 x B x 18 x 512
-        ret['x_recon_mean']  = self.sample_frames(frames_dynamics, mean_inversion, txt_feat)
-        ret['x_mismatch_mean']  = self.sample_frames(frames_dynamics, mean_inversion, mismatch_txt_feat)
-        ret['x_recon_mean_image']  = self.sample_frames(frames_dynamics, mean_inversion, txt_feat)
-        ret['x_mismatch_mean_image']  = self.sample_frames(frames_dynamics, mean_inversion, mismatch_txt_feat)
-        ret['x_swapped_dynamics']  = self.sample_frames(swapped_frames_dynamics, mean_inversion, txt_feat)
+        ret['x_recon_mean']  = self.sample_frames(mean_inversion, conditional_vector)
+        ret['x_mismatch_mean']  = self.sample_frames(mean_inversion, conditional_vector_mismatched)
+        ret['x_recon_mean_image']  = self.sample_frames(mean_inversion, conditional_vector)
+        ret['x_mismatch_mean_image']  = self.sample_frames(mean_inversion, conditional_vector_mismatched)
+        ret['x_swapped_dynamics']  = self.sample_frames(mean_inversion, conditional_vector_dynamic_swapper)
         ret['img_mean_inv'] = self.stylegan_G(mean_inversion[0])
 
         # to_PIL(ret['x_recon_mean_image'][0]).save('tmp.png')
 
         # first frame
         first_inversion = inversions_tf[0:1] # 1 x B x 18 x 512
-        ret['x_recon_first']  = self.sample_frames(frames_dynamics, first_inversion, txt_feat)
-        ret['x_mismatch_first']  = self.sample_frames(frames_dynamics, first_inversion, mismatch_txt_feat)
+        ret['x_recon_first']  = self.sample_frames(first_inversion, conditional_vector)
+        ret['x_mismatch_first']  = self.sample_frames(first_inversion, conditional_vector_mismatched)
         ret['img_first_inv'] = self.stylegan_G(first_inversion[0])
 
         # last frame
         last_inversion = inversions_tf[-1:] # 1 x B x 18 x 512
-        ret['x_recon_last']  = self.sample_frames(frames_dynamics, last_inversion, txt_feat)
-        ret['x_mismatch_last']  = self.sample_frames(frames_dynamics, last_inversion, mismatch_txt_feat)
+        ret['x_recon_last']  = self.sample_frames(last_inversion, conditional_vector)
+        ret['x_mismatch_last']  = self.sample_frames(last_inversion, conditional_vector_mismatched)
         ret['img_last_inv'] = self.stylegan_G(last_inversion[0])
 
-        # # interpolation
-        # interp_mask = torch.ones(T, 1)
-        # interp_mask[[1, 3],:] = 0
-        # interp_video_dynamics = self.video_dynamic_rep(vid_bf, ts, mask=interp_mask)
-        # interp_frames_dynamics = self.sample_frames_dynamics(interp_video_dynamics, ts)
-        # ret['x_interp_mean']  = self.sample_frames(interp_frames_dynamics, mean_inversion, txt_feat)
+        ########  interpolation ########
+        interp_mask = torch.ones(T, 1)
+        interp_mask[[1],:] = 0
+        interp_video_dynamics = self.video_dynamic_rep(vid_rs_bf, ts, mask=interp_mask) 
+        interp_frames_dynamics = self.sample_frames_dynamics(interp_video_dynamics, ts) # T * B x D x H' x W'
+        interp_frames_dynamics = interp_frames_dynamics.permute(0, 2, 3, 1).contiguous().view(T*bs, -1, interp_frames_dynamics.shape[1]) # T * B x H' * W' x D
+        frame_rep = torch.cat((txt_feat.unsqueeze(1), frame_video_style.unsqueeze(1), interp_frames_dynamics), 1) # T*B x D1+D2
+        conditional_vector = self.modulation_network(frame_rep)
+        ret['x_interp_mean']  = self.sample_frames(mean_inversion, conditional_vector)
 
         # # extrapolation
         # extra_mask = torch.ones(T, 1)
@@ -487,7 +553,8 @@ class DiCoMOGANCLIP(pl.LightningModule):
         lr = self.learning_rate
         vae_params = list(self.bVAE_enc.parameters())
 
-        style_m_params = list(self.style_mapper.parameters())
+        style_m_params = list(self.style_mapper.parameters()) + \
+                        list(self.modulation_network.parameters())
         
         opt_vae = torch.optim.Adam(vae_params,
                                   lr=lr * 5, 

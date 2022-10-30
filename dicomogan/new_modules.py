@@ -119,8 +119,9 @@ class EncoderVideo_LatentODE(nn.Module):
                                           odeint_rtol=1e-3,
                                           odeint_atol=1e-4)
 
-        self.lin = nn.Linear(spatial_code_ch * (img_size[0] // resize) * (img_size[1] // resize), hidden_dim)
-        self.mu_gen_d = nn.Linear(hidden_dim, self.dynamic_latent_dim)
+        # self.lin = nn.Linear(spatial_code_ch * (img_size[0] // resize) * (img_size[1] // resize), hidden_dim)
+        # self.mu_gen_d = nn.Linear(hidden_dim, self.dynamic_latent_dim)
+        self.conv1x1 = nn.Conv2d(spatial_code_ch, self.dynamic_latent_dim, kernel_size=1)
 
         # self.apply(kaiming_init)
 
@@ -164,31 +165,19 @@ class EncoderVideo_LatentODE(nn.Module):
         T = t.size(0)
 
         zdt = self.diffeq_solver(zd0, t) # B x T x spatial_code_ch x H' x W'
-        zdt = zdt.permute(1, 0, 2, 3, 4).contiguous().view(batch_size * T, -1) # T * B x spatial_code_ch * H' * W'
+
+        zdt = zdt.permute(1, 0, 2, 3, 4).contiguous().view(batch_size * T, zdt.shape[2], zdt.shape[3], zdt.shape[4]) # T * B x spatial_code_ch x H' x W'
+        # zdt = zdt.permute(1, 0, 2, 3, 4).contiguous().view(batch_size * T, -1) # T * B x spatial_code_ch * H' * W'
 
         zdt = zdt.to(torch.float32)
         # reduce dim to dynamic dim 
-        zdt = self.leakyrelu(self.lin(zdt))
-        zdt = self.mu_gen_d(zdt)  # T * B x D
+        zdt = self.conv1x1(zdt)  # T * B x D x H' x W'
+        # zdt = self.leakyrelu(self.lin(zdt))
+        # zdt = self.mu_gen_d(zdt)  # T * B x D
 
         return zdt
 
-    def forward(self, x, t): # x: B x T x C x H x W , t: (B x T)
-        batch_size = x.size(0)
-        T = x.size(1)
-        mask = torch.zeros(T, 1) 
-        if self.sampling_type == "Interpolate":
-            inds = np.random.choice(np.arange(1, T-1), min(self.n_samples, T) - 2 - self.n_frames_interp, replace=False)
-            mask[inds, :] = 1
-            mask[0, :] = 1
-            mask[T-1, :] = 1
-        elif self.sampling_type == "Extrapolate":
-            #inds = np.random.choice(T-1, min(self.n_samples, T) - 1, replace=False)
-            inds = np.arange(0, T-self.n_frames_ext)
-            mask[inds, :] = 1
-        elif self.sampling_type == "Static":
-            mask = torch.ones(T, 1)
-        
+    def forward(self, x, t, mask): # x: B x T x C x H x W , t: (B x T)
         zd0 = self.video_dynamics(x, t, mask)
         zdt = self.solve_ode(zd0, t)
 
