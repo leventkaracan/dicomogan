@@ -12,7 +12,6 @@ from torch.autograd import Variable
 import torchvision.transforms as transforms
 from torchvision.utils import save_image
 from dicomogan.losses.clip_loss import CLIPLoss
-from dicomogan.losses.lpips import LPIPS
 from dicomogan.losses.loss_lib import GANLoss, VGGLoss, HybridOptim
 from dicomogan.models.utils import ConstScheduler
 import os
@@ -32,6 +31,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
                     style_mapper_config,
                     stylegan_gen_config,
                     modulation_network_config,
+                    perceptual_loss_config, 
                     #mapping_config,
                     lambda_vgg,
                     rec_loss_lambda,
@@ -87,7 +87,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
             self.temporal_discriminator = instantiate_from_config(discriminator_config)
 
         # loss
-        self.criterionVGG = LPIPS().eval()
+        self.criterionVGG = instantiate_from_config(perceptual_loss_config).eval() #  LPIPS().eval()
         self.rec_loss = nn.MSELoss()
         self.l2_latent_loss = nn.MSELoss()
         self.clip_loss = CLIPLoss()

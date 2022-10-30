@@ -284,7 +284,8 @@ class SetupCallback(Callback):
             # ModelCheckpoint callback created log directory --- remove it
             if not self.resume and os.path.exists(self.logdir):
                 dst, name = os.path.split(self.logdir)
-                dst = os.path.join(dst, "child_runs", name)
+                dst = os.path.join(dst, "child_runs_2", name)
+                print("creating", os.path.split(dst)[0])
                 os.makedirs(os.path.split(dst)[0], exist_ok=True)
                 try:
                     os.rename(self.logdir, dst)

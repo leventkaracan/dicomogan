@@ -45,6 +45,15 @@ model:
         max_decay_steps: 60000
     
 
+    perceptual_loss_config:
+      target: dicomogan.losses.splice_vit.SpliceLoss
+      params:
+        structure_lambda : 0.8
+
+
+    # perceptual_loss_config:
+    #   target: dicomogan.losses.lpips.LPIPS
+    #   params:
 
     # discriminator_config:
     #   target: stylegan-v.src.training.networks.Discriminator
