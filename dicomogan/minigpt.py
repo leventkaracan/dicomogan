@@ -226,7 +226,7 @@ class SelfAttentionModulation(nn.Module):
             return [logits, logits, logits]
         
         else:
-            x = [blk(x) for blk in self.blocks]
+            x = [self.blocks[0](x), self.blocks[1](x), self.blocks[2](x[:, :2]) ]
             
             # cls token
             cls_token = torch.stack([out[:, 0] for out in x], 0)

@@ -136,11 +136,18 @@ class CLIPLoss(pl.LightningModule):
             
     def clip_directional_loss(self, pos_img: torch.Tensor, pos_style_embed: torch.Tensor,
                              neg_img: torch.Tensor, ref_style_embed: torch.Tensor, 
-                             global_step: int, norm=True, video=False) -> torch.Tensor:
+                             global_step: int, norm=True, video=False, num_samples=3) -> torch.Tensor:
         if video:
+            # sample frames
+            num_samples = min(num_samples, pos_img.shape[1])
+            indices = np.random.choice(pos_img.shape[1], size=num_samples, replace=False)
+            pos_img = pos_img[:, indices]
+            neg_img = neg_img[:, indices]
+            
             # pos_img: B x T x C x H x W
             # pos_style_embed: B x T x D
             B,  T,  C,  H, W = pos_img.shape
+
             pos_img = pos_img.contiguous().reshape(B*T, C, H, W)
             neg_img = neg_img.contiguous().reshape(B*T, C, H, W)
             pos_encoding = self.get_image_features(pos_img, norm=norm)
