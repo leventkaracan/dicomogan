@@ -89,6 +89,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         # loss
         if perceptual_loss_config is not None:
             self.criterionVGG = instantiate_from_config(perceptual_loss_config).eval() #  LPIPS().eval()
+        
         self.rec_loss = nn.MSELoss()
         self.l2_latent_loss = nn.MSELoss()
         self.clip_loss = CLIPLoss()
@@ -211,10 +212,12 @@ class DiCoMOGANCLIP(pl.LightningModule):
         # video_dynamics # T * B x D
         # mean_inv: # 1 x B x 18 x 512
         # condition_vector: [3 x (T * B x D)]
+        # print(mean_inversion.shape)
         bs = mean_inversion.size(1)
         T = condition_vector[0].size(0) // bs
         # frame_rep = (txt_feat, frame_dynamics, None) # T*B x D1+D2
         src_inversion_tf = mean_inversion.repeat(T, 1, 1, 1)
+        # print('src', src_inversion_tf.shape)
         src_inversion = src_inversion_tf.reshape(T*bs, src_inversion_tf.shape[-2], src_inversion_tf.shape[-1])
         w_latents = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, condition_vector)
         ret = self.stylegan_G(w_latents)
@@ -248,7 +251,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         frame_rep = torch.cat((txt_feat.unsqueeze(1), frame_feat.unsqueeze(1), frame_dynamics), 1) # T*B x D1+D2
         conditional_vector = self.modulation_network(frame_rep)    
 
-        print(conditional_vector[0].shape, mean_inversion.shape)
+        # print(conditional_vector[0].shape, mean_inversion.shape)
         ret = self.sample_frames(mean_inversion.unsqueeze(0), conditional_vector)
         ret = ret.reshape(T, bs, ret.shape[1], ret.shape[2], ret.shape[3]).permute(1, 0, 2, 3, 4)
         return ret

@@ -14,7 +14,7 @@ model:
     n_frames_interpolate : 2
     n_frames_extrapolate : 2
 
-    delta_inversion_weight : 0.05
+    delta_inversion_weight : 0.01
     l2_latent_eps : 0.02
     lambda_vgg: 10.0
     l2_latent_lambda : 1.0
@@ -22,7 +22,7 @@ model:
     clip_loss_lambda:
       target: dicomogan.models.utils.LambdaScheduler
       params:
-        warm_up_steps: 0
+        warm_up_steps: 10000
         lr_min: 0.01
         lr_max: 0.1
         max_decay_steps: 100000
@@ -32,7 +32,7 @@ model:
       params:
         warm_up_steps: 0
         lr_min: 0.01
-        lr_max: 0.3
+        lr_max: 0.2
         max_decay_steps: 120000
 
     rec_loss_lambda:
@@ -43,6 +43,10 @@ model:
         lr_max: 1.0
         max_decay_steps: 200000
     
+    perceptual_loss_config:
+      target: dicomogan.losses.splice_vit.SpliceLoss
+      params:
+        structure_lambda : 0.5
 
     modulation_network_config:
       target: dicomogan.minigpt.SelfAttentionModulation
@@ -90,7 +94,7 @@ model:
         medium_cut_flag: False
         fine_cut_flag: False
         mod_shape : [[1, 4, 1], [1, 4, 1], [1, 10, 1]]
-        num_of_layers : [7, 5, 5]
+        num_of_layers : [5, 5, 5]
         attr_vec_dims: [512, 0, 0] #much match W_cont + CLIP embedding
 
 
@@ -108,7 +112,7 @@ data:
         inverted_img_root : /scratch/users/abond19/datasets/inverted_face_dataset
         inversion_root: /kuacc/users/abond19/datasets/w+_face_dataset
         skip_frames : 5
-        n_sampled_frames : 3
+        n_sampled_frames : 4
         irregular_sampling : True
         batch_size : 2 #MUST match batch size 
         # crop : [512, 384]

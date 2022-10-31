@@ -52,15 +52,6 @@ class SpliceLoss(torch.nn.Module):
     def style_loss(self, outputs, inputs):
         return (1 - self.structure_lambda) * self.calculate_crop_cls_loss(outputs, inputs)
 
-    def style_loss(self, outputs, inputs):
-        losses = {}
-        loss_G = 0
-
-        losses['loss_entire_ssim'] = self.calculate_global_ssim_loss(outputs, inputs)
-        loss_G += self.structure_lambda * losses['loss_entire_ssim'] 
-
-        losses['loss'] = loss_G
-        return loss_G
 
 
     def calculate_global_ssim_loss(self, outputs, inputs):
