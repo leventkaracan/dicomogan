@@ -13,19 +13,20 @@ model:
     sampling_type : "Static"
     n_frames_interpolate : 2
     n_frames_extrapolate : 2
+    n_sampled_frames : 3
 
     delta_inversion_weight : 0.01
     l2_latent_eps : 0.02
     lambda_vgg: 10.0
-    l2_latent_lambda : 1.0
+    l2_latent_lambda : 0.5
 
-    clip_loss_lambda:
-      target: dicomogan.models.utils.LambdaScheduler
-      params:
-        warm_up_steps: 10000
-        lr_min: 0.01
-        lr_max: 0.1
-        max_decay_steps: 100000
+    clip_loss_lambda: 1.0
+      # target: dicomogan.models.utils.LambdaScheduler
+      # params:
+      #   warm_up_steps: 10000
+      #   lr_min: 0.01
+      #   lr_max: 0.1
+      #   max_decay_steps: 100000
 
     consistency_lambda:
       target: dicomogan.models.utils.LambdaScheduler
@@ -38,15 +39,15 @@ model:
     rec_loss_lambda:
       target: dicomogan.models.utils.LambdaScheduler
       params:
-        warm_up_steps: 30000
+        warm_up_steps: 50000
         lr_min: 0.01
         lr_max: 1.0
-        max_decay_steps: 200000
+        max_decay_steps: 100000
     
     perceptual_loss_config:
       target: dicomogan.losses.splice_vit.SpliceLoss
       params:
-        structure_lambda : 0.5
+        structure_lambda : 0.7
 
     modulation_network_config:
       target: dicomogan.minigpt.SelfAttentionModulation
@@ -55,7 +56,7 @@ model:
         out_dim : 512 
         n_embd : 512 # input dim
         block_size : 66 # (img_size[0] // 2 ^ netE_num_downsampling_sp) * (img_size[1] // 2 ^ netE_num_downsampling_sp) + 2
-        n_layer : 8
+        n_layer : 7
         n_head : 8
 
     video_ecnoder_config:
@@ -103,7 +104,7 @@ data:
   target: main.DataModuleFromConfig
   params:
     batch_size: 2 # MUST Match batch size in dataset
-    num_workers: 20
+    num_workers: 15
     train:
       target: dicomogan.data.new_video.VideoDataFashion # Changed from data.video.VideoDataFashion to data.new_video.VideoDataFashion
       params:
@@ -128,7 +129,7 @@ data:
         inverted_img_root : /scratch/users/abond19/datasets/inverted_face_dataset
         inversion_root: /kuacc/users/abond19/datasets/w+_face_dataset
         skip_frames : 5
-        n_sampled_frames : 10
+        n_sampled_frames : 15
         irregular_sampling : False
         batch_size : 2 #MUST match batch size 
         # crop : [512, 384]
@@ -143,4 +144,7 @@ lightning:
     # limit_train_batches : 290 # for 4 gpus 
     replace_sampler_ddp : False
     # precision : 32
+  modelcheckpoint:
+    every_n_epochs : 20
+
 

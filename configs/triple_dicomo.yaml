@@ -13,19 +13,20 @@ model:
     sampling_type : "Static"
     n_frames_interpolate : 2
     n_frames_extrapolate : 2
+    n_sampled_frames : 4
 
     delta_inversion_weight : 0.01
     l2_latent_eps : 0.02
     lambda_vgg: 10.0
     l2_latent_lambda : 1.0
 
-    clip_loss_lambda:
-      target: dicomogan.models.utils.LambdaScheduler
-      params:
-        warm_up_steps: 10000
-        lr_min: 0.01
-        lr_max: 1.0
-        max_decay_steps: 200000
+    clip_loss_lambda: 2.0
+      # target: dicomogan.models.utils.LambdaScheduler
+      # params:
+      #   warm_up_steps: 10000
+      #   lr_min: 0.01
+      #   lr_max: 1.0
+      #   max_decay_steps: 200000
 
     consistency_lambda:
       target: dicomogan.models.utils.LambdaScheduler
@@ -120,7 +121,7 @@ data:
   target: main.DataModuleFromConfig
   params:
     batch_size: 2 # MUST Match batch size in dataset
-    num_workers: 10
+    num_workers: 15
     train:
       target: dicomogan.data.new_video.VideoDataFashion # Changed from data.video.VideoDataFashion to data.new_video.VideoDataFashion
       params:
@@ -129,7 +130,7 @@ data:
         inverted_img_root : /scratch/users/abond19/datasets/inverted_fashion_dataset
         inversion_root: /scratch/users/abond19/datasets/w+_fashion_dataset/fashion/PTI
         skip_frames : 5
-        n_sampled_frames : 6
+        n_sampled_frames : 10
         irregular_sampling : True
         batch_size : 2 #MUST match batch size 
         # crop : [512, 384]

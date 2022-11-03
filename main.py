@@ -470,7 +470,9 @@ class ImageLogger(Callback):
         """
         obtain evaluated images from the model and pass them to the logger
         """
-        if (self.check_frequency(batch_idx) and  # batch_idx % self.batch_freq == 0
+        log = (split == 'train' and self.check_frequency(batch_idx)) or \
+                 (split == 'val' and self.check_frequency(batch_idx))
+        if ( log and  # batch_idx % self.batch_freq == 0
                 hasattr(pl_module, "log_images") and
                 callable(pl_module.log_images) and
                 self.max_images > 0):
@@ -776,7 +778,10 @@ if __name__ == "__main__":
         # trainer = Trainer.from_argparse_args(trainer_opt, **trainer_kwargs, strategy=DDPPlugin(find_unused_parameters=False), 
         #                                      profiler=profiler)
         
-        trainer = Trainer.from_argparse_args(trainer_opt, **trainer_kwargs, strategy=DDPPlugin(find_unused_parameters=False))
+        if opt.resume:
+            trainer = Trainer.from_argparse_args(trainer_opt, **trainer_kwargs, strategy=DDPPlugin(find_unused_parameters=False), resume_from_checkpoint=ckpt)
+        else:
+            trainer = Trainer.from_argparse_args(trainer_opt, **trainer_kwargs, strategy=DDPPlugin(find_unused_parameters=False))
         # configure learning rate
         bs, base_lr = config.data.params.batch_size, config.model.base_learning_rate
         print("Batch size:", bs)
