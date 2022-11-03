@@ -4,6 +4,7 @@ import os
 import numpy as np
 from PIL import Image
 from nltk.tokenize import RegexpTokenizer
+# from smthelse.examples.odenet_mnist import one_hot
 import torch
 import torch.utils.data as data
 import torchvision.transforms as transforms
@@ -32,7 +33,7 @@ class VideoDataFashion(data.Dataset):
                     batch_size, img_transform=None, 
                     inversion_root=None,
                     attribute = None,
-                    crop=None, size=None, onehot=True,
+                    crop=None, size=None, onehot=False,
                     irregular_sampling = True,
                     skip_frames = 0,
                     num_gpus=1,
@@ -97,7 +98,7 @@ class VideoDataFashion(data.Dataset):
                 assert os.path.exists(att_path), f"attribute file does not exists for video {att_path}"
                 attr = self.load_yaml(att_path)
                 attr = attr[self.attribute]
-                if self.to_onehot:
+                if self.onehot:
                     attr = self.to_onehot(self.attribute, attr)
                 attributes.append(attr)
             

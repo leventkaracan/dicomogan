@@ -8,6 +8,7 @@ for path in sys.path:
     else:
         paths.append(path)
 sys.path = paths
+print(sys.path)
 
 
 import matplotlib
@@ -208,7 +209,9 @@ class DataModuleFromConfig(pl.LightningDataModule):
 
     def prepare_data(self):
         for data_cfg in self.dataset_configs.values():
+            print(data_cfg)
             instantiate_from_config(data_cfg, **self.dataset_kwargs)
+            print("finished")
 
     def setup(self, stage=None):
         self.datasets = dict(
@@ -806,6 +809,7 @@ if __name__ == "__main__":
         data.prepare_data()
         data.setup()
 
+        print("Done seting up data", flush=True)
 
         # allow checkpointing via USR1
         def melk(*args, **kwargs):
