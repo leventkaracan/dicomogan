@@ -8,7 +8,7 @@ from dicomogan.models.dino_extractor import VitExtractor
 
 class SpliceLoss(torch.nn.Module):
 
-    def __init__(self, structure_lambda=0.8):
+    def __init__(self, structure_lambda=0.8, cls_layer_num=6):
         super().__init__()
 
         self.extractor = VitExtractor(model_name='dino_vitb16')
@@ -16,6 +16,7 @@ class SpliceLoss(torch.nn.Module):
             param.requires_grad = False
 
         self.structure_lambda = structure_lambda
+        self.cls_layer_num = cls_layer_num
         imagenet_norm = transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
         global_resize_transform = Resize(244)
 
@@ -59,9 +60,11 @@ class SpliceLoss(torch.nn.Module):
         for a, b in zip(inputs, outputs):  # avoid memory limitations
             a = self.global_transform(a)
             b = self.global_transform(b)
+            
             with torch.no_grad():
                 target_keys_self_sim = self.extractor.get_keys_self_sim_from_input(a.unsqueeze(0), layer_num=11)
             keys_ssim = self.extractor.get_keys_self_sim_from_input(b.unsqueeze(0), layer_num=11)
+                
             loss += F.mse_loss(keys_ssim, target_keys_self_sim)
         return loss
 
@@ -70,9 +73,9 @@ class SpliceLoss(torch.nn.Module):
         for a, b in zip(outputs, inputs):  # avoid memory limitations
             a = self.global_transform(a).unsqueeze(0).to(inputs.device)
             b = self.global_transform(b).unsqueeze(0).to(inputs.device)
-            cls_token = self.extractor.get_feature_from_input(a)[-1][0, 0, :]
+            cls_token = self.extractor.get_feature_from_input(a)[self.cls_layer_num][0, 0, :]
             with torch.no_grad():
-                target_cls_token = self.extractor.get_feature_from_input(b)[-1][0, 0, :]
+                target_cls_token = self.extractor.get_feature_from_input(b)[self.cls_layer_num][0, 0, :]
             loss += F.mse_loss(cls_token, target_cls_token)
         return loss
 
@@ -81,8 +84,10 @@ class SpliceLoss(torch.nn.Module):
         for a, b in zip(inputs, outputs):
             a = self.global_transform(a)
             b = self.global_transform(b)
+            
             with torch.no_grad():
                 keys_a = self.extractor.get_keys_from_input(a.unsqueeze(0), 11)
+                
             keys_b = self.extractor.get_keys_from_input(b.unsqueeze(0), 11)
             loss += F.mse_loss(keys_a, keys_b)
         return loss

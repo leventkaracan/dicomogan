@@ -14,19 +14,19 @@ model:
     n_frames_interpolate : 2
     n_frames_extrapolate : 2
     n_sampled_frames : 3
-
     delta_inversion_weight : 0.01
     l2_latent_eps : 0.02
+
     lambda_vgg: 10.0
     l2_latent_lambda : 0.5
 
-    clip_loss_lambda: 1.0
-      # target: dicomogan.models.utils.LambdaScheduler
-      # params:
-      #   warm_up_steps: 10000
-      #   lr_min: 0.01
-      #   lr_max: 0.1
-      #   max_decay_steps: 100000
+    clip_loss_lambda: 
+      target: dicomogan.models.utils.LambdaScheduler
+      params:
+        warm_up_steps: 10000
+        lr_min: 0.01
+        lr_max: 0.1
+        max_decay_steps: 100000
 
     consistency_lambda:
       target: dicomogan.models.utils.LambdaScheduler
@@ -47,7 +47,8 @@ model:
     perceptual_loss_config:
       target: dicomogan.losses.splice_vit.SpliceLoss
       params:
-        structure_lambda : 0.7
+        cls_layer_num : 6
+        structure_lambda : 0.9
 
     modulation_network_config:
       target: dicomogan.minigpt.SelfAttentionModulation

@@ -356,12 +356,12 @@ class CrossAttentionModulation(nn.Module):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    def forward(self, embeddings):
+    def forward(self, style_embed, dyn_embed):
         # embeddings B x T x D
-        t = embeddings.shape[1]
-        assert t <= self.block_size, "Cannot forward, model block size is exhausted."
-        position_embeddings = self.pos_emb[:, :t, :] # each position maps to a (learnable) vector 
-        x = self.drop(embeddings + position_embeddings)
+        t1, t2 = style_embed.shape[1], dyn_embed.shape[1]
+        assert t1 + t2 <= self.block_size, "Cannot forward, model block size is exhausted."
+        embd1 = self.drop(style_embed + self.pos_emb[:, :t1, :])
+        embd2 = self.drop(dyn_embed + self.pos_emb[:, t1:t2, :])
 
         x = [self.blocks[0](x), self.blocks[1](x), self.blocks[2](x[:, :2]) ]
         

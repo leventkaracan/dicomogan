@@ -9,7 +9,7 @@ model:
     # tgt_text : 'Yellow Dresses Made from polyester with V-neckline. The dress is all over ribbed and has front buttons and is short sleeves. The dress is regular fit'
     frame_log_size : [256, 192]
     content_mode : "mean"
-    video_length : 40
+    video_length : 50
     sampling_type : "Static"
     n_frames_interpolate : 2
     n_frames_extrapolate : 2
