@@ -318,7 +318,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         if self.content_mode == 'mean_inv':
             mean_inversion = inversions_tf.mean(0, keepdims=True) # 1 x B x 18 x 512
             with torch.no_grad():
-                ref_frame = self.stylegan_G(mean_inversion[0]) # B x C x H x W
+                ref_frame = self.stylegan_G(mean_inversion[0]) / 2 + 0.5 # B x C x H x W
         else:
             ind = np.random.randint(T)
             mean_inversion = inversions_tf[ind:ind+1]
@@ -331,7 +331,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         txt_feat = txt_feat_tb
 
         # extract frame features
-        frame_feat = self.clip_loss.encode_images(ref_frame) # B x D
+        frame_feat = self.clip_loss.encode_images(ref_frame * 2 - 1) # B x D
         zF_tf = frame_feat.unsqueeze(0).repeat(n_frames, 1, 1)
         zF_tb = zF_tf.contiguous().view(n_frames*bs, -1)
         frame_video_style = zF_tb 
@@ -376,7 +376,6 @@ class DiCoMOGANCLIP(pl.LightningModule):
         reconstruction_inp_res = nn.functional.interpolate(reconstruction, size=(height, width), mode="bicubic", align_corners=False)
         imgs_txt_mismatched_inp_res = nn.functional.interpolate(imgs_txt_mismatched, size=(height, width), mode="bicubic", align_corners=False)
         # img_frame_mismatched_inp_res = nn.functional.interpolate(img_frame_mismatched, size=(height, width), mode="bicubic", align_corners=False)
-
 
 
         # calculate losses
@@ -474,7 +473,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         return a dictionary of tensors in the range [-1, 1]
         """
         ret = dict()
-        if split == 'train':
+        if self.global_step == 0 and split == 'train':
             return ret 
 
         if 'attribute' in batch:
