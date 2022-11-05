@@ -99,7 +99,7 @@ class CausalSelfAttention(nn.Module):
 
 class MultiHeadAttention(nn.Module):
     """
-    A vanilla multi-head masked self-attention layer with a projection at the end.
+    A vanilla multi-head masked attention layer with a projection at the end.
     It is possible to use torch.nn.MultiheadAttention here but I am including an
     explicit implementation here to show that there is nothing too scary here.
     """
@@ -125,12 +125,13 @@ class MultiHeadAttention(nn.Module):
         self.n_head = config.n_head
 
     def forward(self, query, key, value, layer_past=None):
-        B, T, C = query.size()
+        B, T_q, C = query.size()
+        T_k, T_v = key.size(1), value.size(1)
 
         # calculate query, key, values for all heads in batch and move head forward to be the batch dim
-        k = self.key(query).view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
-        q = self.query(key).view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
-        v = self.value(value).view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
+        k = self.key(key).view(B, T_k, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
+        q = self.query(query).view(B, T_q, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
+        v = self.value(value).view(B, T_v, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
 
         present = torch.stack((k, v))
         if layer_past is not None:
@@ -146,7 +147,7 @@ class MultiHeadAttention(nn.Module):
         att = F.softmax(att, dim=-1)
         att = self.attn_drop(att)
         y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
-        y = y.transpose(1, 2).contiguous().view(B, T, C) # re-assemble all head outputs side by side
+        y = y.transpose(1, 2).contiguous().view(B, T_q, C) # re-assemble all head outputs side by side
 
         # output projection
         y = self.resid_drop(self.proj(y))
@@ -184,74 +185,30 @@ class CrossBlock(nn.Module):
     """ an unassuming Transformer block """
     def __init__(self, config):
         super().__init__()
-        self.ln1 = nn.LayerNorm(config.n_embd)
+        self.x_ln1 = nn.LayerNorm(config.n_embd)
+        self.y_ln1 = nn.LayerNorm(config.n_embd)
         self.ln2 = nn.LayerNorm(config.n_embd)
         self.attn = MultiHeadAttention(config)
         self.mlp = nn.Sequential(
-            nn.Linear(config.n_embd, 4 * config.n_embd),
+            nn.Linear(config.n_embd, 2 * config.n_embd),
             nn.GELU(),  # nice
-            nn.Linear(4 * config.n_embd, config.n_embd),
+            nn.Linear(2 * config.n_embd, config.n_embd),
             nn.Dropout(config.resid_pdrop),
         )
 
-    def forward(self, x, layer_past=None, return_present=False):
+    def forward(self, x, y, layer_past=None, return_present=False):
         # TODO: check that training still works
         if return_present: assert not self.training
         # layer past: tuple of length two with B, nh, T, hs
-        attn, present = self.attn(self.ln1(x), layer_past=layer_past)
+        q = self.x_ln1(x)
+        k = v = self.y_ln1(y)
+        attn, present = self.attn(q, k, v, layer_past=layer_past)
 
         x = x + attn
         x = x + self.mlp(self.ln2(x))
         if layer_past is not None or return_present:
             return x, present
         return x
-
-class CrossAttenton(nn.Module):
-    def __init__(self, vocab_size, block_size, n_layer=12, n_head=8, n_embd=256,
-                 embd_pdrop=0., resid_pdrop=0., attn_pdrop=0., n_unmasked=0):
-        super().__init__()
-        config = GPTConfig(vocab_size=vocab_size, block_size=block_size,
-                           embd_pdrop=embd_pdrop, resid_pdrop=resid_pdrop, attn_pdrop=attn_pdrop,
-                           n_layer=n_layer, n_head=n_head, n_embd=n_embd,
-                           n_unmasked=n_unmasked)
-        
-        # input embedding stem
-        self.cls_emb = nn.Parameter(torch.randn(1, 1, config.n_embd))
-        self.pos_emb = nn.Parameter(torch.zeros(1, config.block_size, config.n_embd))
-        self.drop = nn.Dropout(config.embd_pdrop)
-        # transformer
-        self.blocks = nn.Sequential(*[Block(config) for _ in range(config.n_layer)])
-        # decoder head
-        self.ln_f = nn.LayerNorm(config.n_embd)
-        self.head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
-        self.block_size = config.block_size
-        self.apply(self._init_weights)
-        self.config = config
-        logger.info("number of parameters: %e", sum(p.numel() for p in self.parameters()))
-
-    def get_block_size(self):
-        return self.block_size
-
-    def _init_weights(self, module):
-        if isinstance(module, (nn.Linear, nn.Embedding)):
-            module.weight.data.normal_(mean=0.0, std=0.02)
-            if isinstance(module, nn.Linear) and module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-
-    def forward(self, embeddings, ts):
-        # embeddings B x T x D
-        t = embeddings.shape[1]
-        assert t <= self.block_size, "Cannot forward, model block size is exhausted."
-        position_embeddings = self.pos_emb[:, ts, :] # each position maps to a (learnable) vector # TODO fix positional embed
-        x = self.drop(embeddings + position_embeddings)
-        x = self.blocks(x)
-        x = self.ln_f(x)
-        logits = self.head(x)
-
-        return logits
 
 
 class SelfAttentionModulation(nn.Module):
@@ -319,29 +276,39 @@ class SelfAttentionModulation(nn.Module):
         
 
 class CrossAttentionModulation(nn.Module):
-    def __init__(self, out_dim, block_size, n_layer=12, n_head=8, n_embd=256,
-                 embd_pdrop=0., resid_pdrop=0., attn_pdrop=0., n_unmasked=0, shared_attn_params=True):
+    def __init__(self, out_dim, dyn_block_size, content_block_size=1, n_layer=12, dyn_attn_n_layer=4, n_head=8, n_embd=256,
+                  embd_pdrop=0., resid_pdrop=0., attn_pdrop=0., n_unmasked=0, shared_attn_params=True):
         super().__init__()
-        config = GPTConfig(vocab_size=out_dim, block_size=block_size,
+        self_config = GPTConfig(vocab_size=n_embd, block_size=dyn_block_size,
+                           embd_pdrop=embd_pdrop, resid_pdrop=resid_pdrop, attn_pdrop=attn_pdrop,
+                           n_layer=dyn_attn_n_layer, n_head=n_head, n_embd=n_embd,
+                           n_unmasked=n_unmasked)
+
+        cross_config = GPTConfig(vocab_size=out_dim, block_size=dyn_block_size,
                            embd_pdrop=embd_pdrop, resid_pdrop=resid_pdrop, attn_pdrop=attn_pdrop,
                            n_layer=n_layer, n_head=n_head, n_embd=n_embd,
                            n_unmasked=n_unmasked)
         
         self.shared_attn_params = shared_attn_params
         # input embedding stem
-        self.pos_emb = nn.Parameter(torch.zeros(1, config.block_size, config.n_embd))
-        self.drop = nn.Dropout(config.embd_pdrop)
+        self.content_pos_emd = nn.Parameter(torch.zeros(1, content_block_size, n_embd))
+        self.dyn_pos_emb = nn.Parameter(torch.zeros(1, dyn_block_size, n_embd))
+        self.drop = nn.Dropout(cross_config.embd_pdrop)
+        
+        self.slf_blocks = nn.Sequential(*[Block(self_config) for _ in range(dyn_attn_n_layer)])
         # transformer
         if shared_attn_params:
-            self.blocks = nn.Sequential(*[Block(config) for _ in range(config.n_layer)])
+            self.blocks = nn.Sequential(*[CrossBlock(cross_config) for _ in range(n_layer)])
+            self.ln_f = nn.LayerNorm(cross_config.n_embd)
+            self.head = nn.Linear(cross_config.n_embd, cross_config.vocab_size, bias=False)
         else:
-            self.blocks = nn.ModuleList([nn.Sequential(*[Block(config) for _ in range(config.n_layer)]) for _ in range(3)])
-        # decoder head
-        self.ln_f = nn.LayerNorm(config.n_embd)
-        self.head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
-        self.block_size = config.block_size
+            self.blocks = nn.ModuleList([nn.ModuleList([CrossBlock(cross_config) for _ in range(3)]) for _ in range(cross_config.n_layer)])
+            self.ln_f = nn.ModuleList([nn.LayerNorm(cross_config.n_embd) for _ in range(3)])
+            self.head = nn.ModuleList([nn.Linear(cross_config.n_embd, cross_config.vocab_size, bias=False) for _ in range(3)])
+        
+        self.contet_block_size = content_block_size
+        self.dyn_block_size = dyn_block_size
         self.apply(self._init_weights)
-        self.config = config
         logger.info("number of parameters: %e", sum(p.numel() for p in self.parameters()))
 
     def get_block_size(self):
@@ -359,17 +326,30 @@ class CrossAttentionModulation(nn.Module):
     def forward(self, style_embed, dyn_embed):
         # embeddings B x T x D
         t1, t2 = style_embed.shape[1], dyn_embed.shape[1]
-        assert t1 + t2 <= self.block_size, "Cannot forward, model block size is exhausted."
-        embd1 = self.drop(style_embed + self.pos_emb[:, :t1, :])
-        embd2 = self.drop(dyn_embed + self.pos_emb[:, t1:t2, :])
 
-        x = [self.blocks[0](x), self.blocks[1](x), self.blocks[2](x[:, :2]) ]
-        
+        # TODO:
+        assert t1 <= self.contet_block_size, f"Cannot forward, content block size is exhausted. {t1} > {self.contet_block_size}"
+        assert t2 <= self.dyn_block_size, f"Cannot forward, dynamic block size is exhausted. {t2} > {self.dyn_block_size}"
+        embd1 = self.drop(style_embed + self.content_pos_emd[:, :t1, :])
+        embd2 = self.drop(dyn_embed + self.dyn_pos_emb[:, :t2, :])
+
+        y = self.slf_blocks(embd2)
+        x = [embd1, embd1, embd1]
+
+        for blks in self.blocks:
+            x[0] = blks[0](x[0], y)
+            x[1] = blks[1](x[1], y)
+
+            # TODO: remove dynamic modulation on the fine layers
+            x[2] = blks[2](x[2], y)
+
+
         # cls token
-        cls_token = torch.stack([out[:, 0] for out in x], 0)
-        cls_token = self.ln_f(cls_token)
-        logits = self.head(cls_token)
-        return [logits[0], logits[1], logits[2]]
+        cls_token = [self.head[0](self.ln_f[0](x[0][:, 0])),
+                self.head[1](self.ln_f[1](x[1][:, 0])),
+                self.head[2](self.ln_f[2](x[2][:, 0]))]
+
+        return cls_token
 
 
 class GPT(nn.Module):

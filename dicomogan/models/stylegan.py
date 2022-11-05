@@ -24,6 +24,7 @@ class StyleGAN2Generator(nn.Module):
         label = torch.zeros([1, self.G.c_dim]).to(device)
         z = torch.from_numpy(np.random.randn(1, self.G.z_dim)).to(device)
         w = self.G.mapping(z, label)
+        print(w.requires_grad)
         return self.forward(w)
 
 

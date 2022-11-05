@@ -91,7 +91,6 @@ class DiCoMOGANCLIP(pl.LightningModule):
         # loss
         if perceptual_loss_config is not None:
             self.criterionVGG = instantiate_from_config(perceptual_loss_config).eval() #  LPIPS().eval()
-        
         self.requires_grad(self.criterionVGG, False)
 
         self.rec_loss = nn.MSELoss()
@@ -341,8 +340,8 @@ class DiCoMOGANCLIP(pl.LightningModule):
         rep_video_dynamics = self.video_dynamic_rep(vid_bf, ts, mask=self.prepare_mask(T)) 
 
         # sample n_frames
-        frame_dynamics = self.sample_frames_dynamics(rep_video_dynamics, ts[frame_inds]) # T * B x D x H' x W'
-        frame_dynamics = frame_dynamics.permute(0, 2, 3, 1).contiguous().view(n_frames*bs, -1, frame_dynamics.shape[1]) # T * B x H' * W' x D
+        frame_dynamics = self.sample_frames_dynamics(rep_video_dynamics, ts[frame_inds]) # n_frames * B x D x H' x W'
+        frame_dynamics = frame_dynamics.permute(0, 2, 3, 1).contiguous().view(n_frames*bs, -1, frame_dynamics.shape[1]) # n_frames * B x H' * W' x D
                                
         total_loss = 0
         vgg_loss = 0 
@@ -353,28 +352,30 @@ class DiCoMOGANCLIP(pl.LightningModule):
         # vid_mismatch, _ = self.preprocess_text_feat(txt_feat, mx_roll=2) # T*B x D2
         
         # frame rep (video_style, video_content, dynamics)
-        frame_rep = torch.cat((frame_video_style.unsqueeze(1), frame_dynamics), 1) # T*B x D1+D2
-        frame_rep_txt_mismatched = torch.cat((txt_dir.unsqueeze(1) + frame_video_style.unsqueeze(1), frame_dynamics), 1) # T*B x D1+D2
+        # frame_rep = torch.cat((frame_video_style.unsqueeze(1), frame_dynamics), 1) # T*B x D1+D2
+        # frame_rep_txt_mismatched = torch.cat((txt_dir.unsqueeze(1) + frame_video_style.unsqueeze(1), frame_dynamics), 1) # T*B x D1+D2
         # frame_rep_vid_mismatched = torch.cat((txt_feat_mismatch.unsqueeze(1), frame_video_style.unsqueeze(1), frame_dynamics), 1) # T*B x D1+D2
 
+        frame_rep = (frame_video_style.unsqueeze(1), frame_dynamics)# T*B x D1+D2
+        frame_rep_txt_mismatched = (txt_dir.unsqueeze(1) + frame_video_style.unsqueeze(1), frame_dynamics) # T*B x D1+D2
 
         src_inversion_tf = mean_inversion.repeat(n_frames, 1, 1, 1)
         src_inversion = src_inversion_tf.reshape(n_frames*bs, n_channels, dim)
-        src_inversion_mismatched = torch.roll(src_inversion, 1, dims=0)
+        # src_inversion_mismatched = torch.roll(src_inversion, 1, dims=0)
 
-        conditional_vector = self.modulation_network(frame_rep)
-        conditional_vector_mismatched = self.modulation_network(frame_rep_txt_mismatched)
+        conditional_vector = self.modulation_network(*frame_rep)
+        conditional_vector_mismatched = self.modulation_network(*frame_rep_txt_mismatched)
         w_latents = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, conditional_vector)
         w_latents_txt_mismatched = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, conditional_vector_mismatched)
-        w_latents_dyn_mismatched = src_inversion_mismatched + self.delta_inversion_weight * self.style_mapper(src_inversion_mismatched, conditional_vector)
+        # w_latents_dyn_mismatched = src_inversion_mismatched + self.delta_inversion_weight * self.style_mapper(src_inversion_mismatched, conditional_vector)
 
         reconstruction = self.stylegan_G(w_latents) # T*B x 3 x H x W
         imgs_txt_mismatched = self.stylegan_G(w_latents_txt_mismatched) # T*B x 3 x H x W
-        img_frame_mismatched = self.stylegan_G(w_latents_dyn_mismatched) # T*B x 3 x H x W
+        # img_frame_mismatched = self.stylegan_G(w_latents_dyn_mismatched) # T*B x 3 x H x W
 
         reconstruction_inp_res = nn.functional.interpolate(reconstruction, size=(height, width), mode="bicubic", align_corners=False)
         imgs_txt_mismatched_inp_res = nn.functional.interpolate(imgs_txt_mismatched, size=(height, width), mode="bicubic", align_corners=False)
-        img_frame_mismatched_inp_res = nn.functional.interpolate(img_frame_mismatched, size=(height, width), mode="bicubic", align_corners=False)
+        # img_frame_mismatched_inp_res = nn.functional.interpolate(img_frame_mismatched, size=(height, width), mode="bicubic", align_corners=False)
 
 
 
@@ -394,8 +395,8 @@ class DiCoMOGANCLIP(pl.LightningModule):
         # structure/style loss
         style_loss, structure_loss = 0, 0
         structure_loss += self.criterionVGG.structure_loss(reconstruction_inp_res.contiguous() / 2 + 0.5, video_sample.contiguous().detach()).mean()
-        # structure_loss += self.criterionVGG.structure_loss(imgs_txt_mismatched_inp_res.contiguous() / 2 + 0.5, video_sample.contiguous().detach()).mean()
-        structure_loss += self.criterionVGG.structure_loss(img_frame_mismatched_inp_res.contiguous() / 2 + 0.5, video_sample.contiguous().detach()).mean()
+        structure_loss += self.criterionVGG.structure_loss(imgs_txt_mismatched_inp_res.contiguous() / 2 + 0.5, video_sample.contiguous().detach()).mean()
+        # structure_loss += self.criterionVGG.structure_loss(img_frame_mismatched_inp_res.contiguous() / 2 + 0.5, video_sample.contiguous().detach()).mean()
 
         style_loss += self.criterionVGG.style_loss(reconstruction_inp_res.contiguous() / 2 + 0.5, ref_frame.repeat(bs*T, 1, 1, 1).contiguous().detach()).mean()
         vgg_loss = structure_loss + style_loss
@@ -429,6 +430,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         consistency_loss = 0
         if self.global_step == 0 or self.consistency_lambda(self.global_step) > 0:
             consistency_loss = self.clip_loss.consistency_loss(reconstruction_bf)
+            # TODO: use consistency loss on the frame_mismatched
             consistency_loss += self.clip_loss.consistency_loss(imgs_txt_mismatched_bf)
 
         # lambdas
@@ -526,13 +528,17 @@ class DiCoMOGANCLIP(pl.LightningModule):
         frame_dynamics_swapped = torch.roll(frame_dynamics.view(T, bs, -1, frame_dynamics.shape[-1]).contiguous(), 1, dims=1).view(T*bs, -1, frame_dynamics.shape[-1]) 
         
         # frame rep (video_style, video_content, dynamics)
-        frame_rep = torch.cat((frame_video_style.unsqueeze(1), frame_dynamics), 1) # T*B x D1+D2
-        frame_rep_txt_mismatched = torch.cat((txt_dir.unsqueeze(1) + frame_video_style.unsqueeze(1), frame_dynamics), 1) # T*B x D1+D2
-        frame_rep_dynamics_swapped= torch.cat((frame_video_style.unsqueeze(1), frame_dynamics_swapped), 1) # T*B x D1+D2
+        # frame_rep = torch.cat((frame_video_style.unsqueeze(1), frame_dynamics), 1) # T*B x D1+D2
+        # frame_rep_txt_mismatched = torch.cat((txt_dir.unsqueeze(1) + frame_video_style.unsqueeze(1), frame_dynamics), 1) # T*B x D1+D2
+        # frame_rep_dynamics_swapped= torch.cat((frame_video_style.unsqueeze(1), frame_dynamics_swapped), 1) # T*B x D1+D2
+
+        frame_rep = (frame_video_style.unsqueeze(1), frame_dynamics) # T*B x D1+D2
+        frame_rep_txt_mismatched = (txt_dir.unsqueeze(1) + frame_video_style.unsqueeze(1), frame_dynamics) # T*B x D1+D2
+        frame_rep_dynamics_swapped= (frame_video_style.unsqueeze(1), frame_dynamics_swapped) # T*B x D1+D2
         
-        conditional_vector = self.modulation_network(frame_rep)
-        conditional_vector_mismatched = self.modulation_network(frame_rep_txt_mismatched)
-        conditional_vector_dynamic_swapper= self.modulation_network(frame_rep_dynamics_swapped)
+        conditional_vector = self.modulation_network(*frame_rep)
+        conditional_vector_mismatched = self.modulation_network(*frame_rep_txt_mismatched)
+        conditional_vector_dynamic_swapper= self.modulation_network(*frame_rep_dynamics_swapped)
 
         # mean frame
         ret['x_recon_mean']  = self.sample_frames(mean_inversion, conditional_vector)
@@ -546,15 +552,29 @@ class DiCoMOGANCLIP(pl.LightningModule):
 
         # first frame
         first_inversion = inversions_tf[0:1] # 1 x B x 18 x 512
-        ret['x_recon_first']  = self.sample_frames(first_inversion, conditional_vector)
-        ret['x_mismatch_first']  = self.sample_frames(first_inversion, conditional_vector_mismatched)
-        ret['img_first_inv'] = self.stylegan_G(first_inversion[0])
+        ref_frame = self.stylegan_G(first_inversion[0])
+        frame_feat = self.clip_loss.encode_images(ref_frame) # B x D
+        zF_tf = frame_feat.unsqueeze(0).repeat(T, 1, 1)
+        zF_tb = zF_tf.contiguous().view(T*bs, -1)
+        frame_video_style = zF_tb 
+        frame_rep = (frame_video_style.unsqueeze(1), frame_dynamics) # T*B x D1+D2
+        first_frame_conditional_vector = self.modulation_network(*frame_rep)
+        ret['x_recon_first']  = self.sample_frames(first_inversion, first_frame_conditional_vector)
+        ret['x_recon_mismatch_ref_frame']  = self.sample_frames(first_inversion, conditional_vector)
+        ret['img_first_inv'] = ref_frame
 
         # last frame
         last_inversion = inversions_tf[-1:] # 1 x B x 18 x 512
-        ret['x_recon_last']  = self.sample_frames(last_inversion, conditional_vector)
-        ret['x_mismatch_last']  = self.sample_frames(last_inversion, conditional_vector_mismatched)
-        ret['img_last_inv'] = self.stylegan_G(last_inversion[0])
+        ref_frame = self.stylegan_G(last_inversion[0])
+        frame_feat = self.clip_loss.encode_images(ref_frame) # B x D
+        zF_tf = frame_feat.unsqueeze(0).repeat(T, 1, 1)
+        zF_tb = zF_tf.contiguous().view(T*bs, -1)
+        frame_video_style = zF_tb 
+        frame_rep = (frame_video_style.unsqueeze(1), frame_dynamics) # T*B x D1+D2
+        last_frame_conditional_vector = self.modulation_network(*frame_rep)
+        ret['x_recon_last']  = self.sample_frames(last_inversion, last_frame_conditional_vector)
+        ret['x_recon_mismatch_ref_frame']  = self.sample_frames(last_inversion, conditional_vector)
+        ret['img_last_inv'] = ref_frame
 
         ########  interpolation ########
         interp_mask = torch.ones(T, 1)
@@ -562,8 +582,9 @@ class DiCoMOGANCLIP(pl.LightningModule):
         interp_video_dynamics = self.video_dynamic_rep(vid_bf, ts, mask=interp_mask) 
         interp_frames_dynamics = self.sample_frames_dynamics(interp_video_dynamics, ts) # T * B x D x H' x W'
         interp_frames_dynamics = interp_frames_dynamics.permute(0, 2, 3, 1).contiguous().view(T*bs, -1, interp_frames_dynamics.shape[1]) # T * B x H' * W' x D
-        frame_rep = torch.cat((frame_video_style.unsqueeze(1), interp_frames_dynamics), 1) # T*B x D1+D2
-        conditional_vector = self.modulation_network(frame_rep)
+        # frame_rep = torch.cat((frame_video_style.unsqueeze(1), interp_frames_dynamics), 1) # T*B x D1+D2
+        frame_rep = (frame_video_style.unsqueeze(1), interp_frames_dynamics) # T*B x D1+D2
+        conditional_vector = self.modulation_network(*frame_rep)
         ret['x_interp_mean']  = self.sample_frames(mean_inversion, conditional_vector)
 
         # # extrapolation
