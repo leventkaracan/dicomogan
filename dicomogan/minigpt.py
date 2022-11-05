@@ -302,7 +302,7 @@ class CrossAttentionModulation(nn.Module):
             self.ln_f = nn.LayerNorm(cross_config.n_embd)
             self.head = nn.Linear(cross_config.n_embd, cross_config.vocab_size, bias=False)
         else:
-            self.blocks = nn.ModuleList([nn.ModuleList([CrossBlock(cross_config) for _ in range(3)]) for _ in range(cross_config.n_layer)])
+            self.blocks = nn.ModuleList([nn.ModuleList([CrossBlock(cross_config) for _ in range(2)]) for _ in range(cross_config.n_layer)])
             self.ln_f = nn.ModuleList([nn.LayerNorm(cross_config.n_embd) for _ in range(3)])
             self.head = nn.ModuleList([nn.Linear(cross_config.n_embd, cross_config.vocab_size, bias=False) for _ in range(3)])
         
@@ -341,7 +341,7 @@ class CrossAttentionModulation(nn.Module):
             x[1] = blks[1](x[1], y)
 
             # TODO: remove dynamic modulation on the fine layers
-            x[2] = blks[2](x[2], y)
+            # x[2] = blks[2](x[2], y)
 
 
         # cls token
