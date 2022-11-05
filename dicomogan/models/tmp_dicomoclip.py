@@ -227,14 +227,14 @@ class DiCoMOGANCLIP(pl.LightningModule):
         return ret
 
 
-    def forward(self, vid_bf, sampleT, mean_inversion, txt_feat, frame_feat, mask=None, rep_video_dynamics=None):
+    def forward(self, vid_bf, sampleT, mean_inversion, txt_dir, frame_feat, mask=None, rep_video_dynamics=None):
         bs, T, ch, height, width = vid_bf.size()
 
         # repeat features
         tar_T = sampleT.shape[0]
-        txt_feat_tf = txt_feat.unsqueeze(0).repeat(tar_T, 1, 1)
+        txt_feat_tf = txt_dir.unsqueeze(0).repeat(tar_T, 1, 1)
         txt_feat_tb = txt_feat_tf.contiguous().view(tar_T*bs, -1)
-        txt_feat = txt_feat_tb
+        txt_dir = txt_feat_tb
 
         # extract frame features
         zF_tf = frame_feat.unsqueeze(0).repeat(tar_T, 1, 1)
@@ -255,8 +255,8 @@ class DiCoMOGANCLIP(pl.LightningModule):
         frame_dynamics = frame_dynamics.permute(0, 2, 3, 1).contiguous().view(tar_T*bs, -1, frame_dynamics.shape[1]) # T * B x H' * W' x D
         
         # TODO: fix frame rep according to the training step
-        frame_rep = torch.cat((txt_feat.unsqueeze(1), frame_feat.unsqueeze(1), frame_dynamics), 1) # T*B x D1+D2
-        conditional_vector = self.modulation_network(frame_rep)    
+        frame_rep = (txt_dir.unsqueeze(1) + frame_feat.unsqueeze(1), frame_dynamics) # T*B x D1+D2
+        conditional_vector = self.modulation_network(*frame_rep)    
 
         # print(conditional_vector[0].shape, mean_inversion.shape)
         ret = self.sample_frames(mean_inversion.unsqueeze(0), conditional_vector)
