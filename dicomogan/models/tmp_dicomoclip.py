@@ -322,7 +322,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         else:
             ind = np.random.randint(T)
             mean_inversion = inversions_tf[ind:ind+1]
-            # ind = np.random.randint(T)
+            ind = np.random.randint(T)
             ref_frame = inverted_vid_tf[ind]
 
         # encode text
