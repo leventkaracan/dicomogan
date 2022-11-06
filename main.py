@@ -1,7 +1,7 @@
 # hard coded for now 
 from random import shuffle
 import sys
-# paths, ainaz_paths, abond_paths = [], [], []
+paths, ainaz_paths, abond_paths = [], [], []
 # for path in sys.path:
 #     # if 'abond' in path:
 #     #     abond_paths.append(path)
@@ -9,9 +9,9 @@ import sys
 #         ainaz_paths.append(path)
 #     else:
 #         paths.append(path)
-# sys.path = paths
-# print(sys.path)
-
+# sys.path = paths[0:1] + ['kuacc/users/mali18/.conda/envs/tokengan/lib/python3.7/site-packages'] + paths[1:] 
+print(sys.path)
+import PIL
 # # TODO: This does not make any f sense
 # try:
 #     import pytorch_lightning
