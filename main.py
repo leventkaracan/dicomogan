@@ -1,22 +1,25 @@
 # hard coded for now 
 from random import shuffle
 import sys
-paths, ainaz_paths, abond_paths = [], [], []
-for path in sys.path:
-    # if 'abond' in path:
-    #     abond_paths.append(path)
-    if 'ajamshidi' in path:
-        ainaz_paths.append(path)
-    else:
-        paths.append(path)
-sys.path = paths
+# paths, ainaz_paths, abond_paths = [], [], []
+# for path in sys.path:
+#     # if 'abond' in path:
+#     #     abond_paths.append(path)
+#     if 'ajamshidi' in path:
+#         ainaz_paths.append(path)
+#     else:
+#         paths.append(path)
+# sys.path = paths
+# sys.path.append('/scratch/users/mali18/.conda/envs')
 print(sys.path)
 
 # TODO: This does not make any f sense
-try:
-    import pytorch_lightning
-except:
-    print("could not import torch. retrying...")
+# try:
+#     import pytorch_lightning
+# except:
+#     print("could not import torch. retrying...")
+#     import pytorch_lightning
+#     print(pytorch_lightning.__version__)
 
 import matplotlib
 matplotlib.use('Agg')

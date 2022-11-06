@@ -89,8 +89,9 @@ class DiCoMOGANCLIP(pl.LightningModule):
             self.temporal_discriminator = instantiate_from_config(discriminator_config)
 
         # loss
-        if perceptual_loss_config is not None:
-            self.criterionVGG = instantiate_from_config(perceptual_loss_config).eval() #  LPIPS().eval()
+        # if perceptual_loss_config is not None:
+        #     self.criterionVGG = instantiate_from_config(perceptual_loss_config).eval() #  LPIPS().eval()
+        self.criterionVGG = VGGLoss()
         self.requires_grad(self.criterionVGG, False)
 
         self.rec_loss = nn.MSELoss()
@@ -393,11 +394,11 @@ class DiCoMOGANCLIP(pl.LightningModule):
         
         # structure/style loss
         style_loss, structure_loss = 0, 0
-        structure_loss += self.criterionVGG.structure_loss(reconstruction_inp_res.contiguous() / 2 + 0.5, video_sample.contiguous().detach()).mean()
-        structure_loss += self.criterionVGG.structure_loss(imgs_txt_mismatched_inp_res.contiguous() / 2 + 0.5, video_sample.contiguous().detach()).mean()
+        structure_loss += self.criterionVGG(reconstruction_inp_res.contiguous() / 2 + 0.5, video_sample.contiguous().detach()).mean()
+        # structure_loss += self.criterionVGG(imgs_txt_mismatched_inp_res.contiguous() / 2 + 0.5, video_sample.contiguous().detach()).mean()
         # structure_loss += self.criterionVGG.structure_loss(img_frame_mismatched_inp_res.contiguous() / 2 + 0.5, video_sample.contiguous().detach()).mean()
 
-        style_loss += self.criterionVGG.style_loss(reconstruction_inp_res.contiguous() / 2 + 0.5, ref_frame.repeat(bs*T, 1, 1, 1).contiguous().detach()).mean()
+        # style_loss += self.criterionVGG.style_loss(reconstruction_inp_res.contiguous() / 2 + 0.5, ref_frame.repeat(bs*T, 1, 1, 1).contiguous().detach()).mean()
         vgg_loss = structure_loss + style_loss
 
 
