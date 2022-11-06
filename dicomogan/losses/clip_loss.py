@@ -69,7 +69,7 @@ class CLIPLoss(pl.LightningModule):
         super(CLIPLoss, self).__init__()
         self.model, clip_preprocess = clip.load(clip_model, device=self.device)
         self.norm = norm
-        self.eps = 1e-5
+        self.eps = 1e-9
         # freeze clip model
         for param in self.model.parameters():
             param.requires_grad = False
@@ -93,10 +93,11 @@ class CLIPLoss(pl.LightningModule):
     # def get_perceptual_loss(self, imgs1, imgs2):
 
 
-    def get_text_features(self, texts:List, norm: bool = True) -> torch.Tensor:
+    def get_text_features(self, texts:List, norm: bool = None) -> torch.Tensor:
         tokens = self.tokenize(texts)
         text_features = self.encode_text(tokens).detach()
-
+        if norm is None:
+            norm = self.norm
         if norm:
             text_features /= text_features.norm(dim=-1, keepdim=True)
 
@@ -125,9 +126,11 @@ class CLIPLoss(pl.LightningModule):
         return self.model.encode_image(images)
 
 
-    def get_image_features(self, img: torch.Tensor, norm: bool = True) -> torch.Tensor:
+    def get_image_features(self, img: torch.Tensor, norm: bool = None) -> torch.Tensor:
         image_features = self.encode_images(img)
         
+        if norm is None:
+            norm = self.norm
         if norm:
             image_features /= image_features.clone().norm(dim=-1, keepdim=True)
 
@@ -180,8 +183,12 @@ class CLIPLoss(pl.LightningModule):
         pos_direction = (pos_style_embed.float().contiguous()  - ref_style_embed.float().contiguous())
         neg_direction = (pos_encoding.float().contiguous()  - neg_encoding.float().contiguous())
 
-        pos_direction += self.eps
-        neg_direction += self.eps
+        # TODO: fix
+        if torch.all(pos_direction == 0):
+            return neg_direction.norm()
+
+        # pos_direction += self.eps
+        # neg_direction += self.eps
 
         if norm:
             pos_direction = pos_direction / (pos_direction.norm(dim=-1, keepdim=True))

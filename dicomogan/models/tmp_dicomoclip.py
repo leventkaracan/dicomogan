@@ -348,7 +348,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
 
         # roll batch-wise
         txt_feat_mismatch, _ = self.preprocess_text_feat(txt_feat, mx_roll=2) # T*B x D2
-        txt_dir = 0.1 * (txt_feat_mismatch - txt_feat)
+        txt_dir = 2 * (txt_feat_mismatch - txt_feat)
         # vid_mismatch, _ = self.preprocess_text_feat(txt_feat, mx_roll=2) # T*B x D2
         
         # frame rep (video_style, video_content, dynamics)
@@ -522,7 +522,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
 
         # roll batch-wise
         txt_feat_mismatch, _ = self.preprocess_text_feat(txt_feat, mx_roll=2) # T*B x D2
-        txt_dir = 0.1 * (txt_feat_mismatch - txt_feat)
+        txt_dir = 2 * (txt_feat_mismatch - txt_feat)
 
         frame_dynamics_swapped = torch.roll(frame_dynamics.view(T, bs, -1, frame_dynamics.shape[-1]).contiguous(), 1, dims=1).view(T*bs, -1, frame_dynamics.shape[-1]) 
         
