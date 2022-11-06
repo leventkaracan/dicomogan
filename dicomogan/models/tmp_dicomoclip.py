@@ -358,8 +358,8 @@ class DiCoMOGANCLIP(pl.LightningModule):
         # frame_rep_txt_mismatched = torch.cat((txt_dir.unsqueeze(1) + frame_video_style.unsqueeze(1), frame_dynamics), 1) # T*B x D1+D2
         # frame_rep_vid_mismatched = torch.cat((txt_feat_mismatch.unsqueeze(1), frame_video_style.unsqueeze(1), frame_dynamics), 1) # T*B x D1+D2
 
-        frame_rep = (frame_video_style, frame_dynamics.view(n_frames*T, -1))# T*B x D1+D2
-        frame_rep_txt_mismatched = (txt_dir + frame_video_style, frame_dynamics.view(n_frames*T, -1)) # T*B x D1+D2
+        frame_rep = (frame_video_style, frame_dynamics.view(n_frames*bs, -1))# T*B x D1+D2
+        frame_rep_txt_mismatched = (txt_dir + frame_video_style, frame_dynamics.view(n_frames*bs, -1)) # T*B x D1+D2
 
         src_inversion_tf = mean_inversion.repeat(n_frames, 1, 1, 1)
         src_inversion = src_inversion_tf.reshape(n_frames*bs, n_channels, dim)
@@ -367,8 +367,8 @@ class DiCoMOGANCLIP(pl.LightningModule):
 
         conditional_vector = torch.cat(frame_rep, 1).view(n_frames*bs, -1) #self.modulation_network(*frame_rep)
         conditional_vector_mismatched = torch.cat(frame_rep_txt_mismatched, 1).view(n_frames*bs, -1)
-        w_latents = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, conditional_vector)
-        w_latents_txt_mismatched = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, conditional_vector_mismatched)
+        w_latents = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, [conditional_vector, conditional_vector, conditional_vector])
+        w_latents_txt_mismatched = src_inversion + self.delta_inversion_weight * self.style_mapper(src_inversion, [conditional_vector_mismatched, conditional_vector_mismatched, conditional_vector_mismatched])
         # w_latents_dyn_mismatched = src_inversion_mismatched + self.delta_inversion_weight * self.style_mapper(src_inversion_mismatched, conditional_vector)
 
         reconstruction = self.stylegan_G(w_latents) # T*B x 3 x H x W
