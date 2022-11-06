@@ -153,6 +153,7 @@ class ModulationModule(nn.Module):
         # print(f"x: {x.shape}")
         # print(f"gamma: {gamma.shape}")
         # print(f"beta: {beta.shape}")
+        # print(x.shape, embedding.shape, gamma.shape, beta.shape)
         out = x * (1 + gamma) + beta
         out = self.leakyrelu(out)
         return out
@@ -289,6 +290,7 @@ class TripleAttributeMapper(nn.Module):
         self.fine_mapping = AttributeMapperSubModule(self.attr_vec_dims, 8, self.use_fine_mapper, self.fine_cut_flag, mod_shape=mod_shape[2], modtype=modtype, num_of_layers=num_of_layers[2])
     
     def forward(self, x, attribute_vector1, attribute_vector2=None, attribute_vector3=None):
+        # print("x input shape")
         x_coarse = x[:, :4, :]
         x_medium = x[:, 4:10, :]
         x_fine = x[:, 10:, :]
