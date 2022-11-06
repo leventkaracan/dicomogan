@@ -191,7 +191,8 @@ class CLIPLoss(pl.LightningModule):
         # neg_direction += self.eps
 
         if norm:
-            pos_direction = pos_direction / (pos_direction.norm(dim=-1, keepdim=True))
+            if pos_direction.norm(dim=-1, keepdim=True) != 0:
+                pos_direction = pos_direction / (pos_direction.norm(dim=-1, keepdim=True))
             neg_direction = neg_direction / (neg_direction.norm(dim=-1, keepdim=True))
 
         # project to given directions
