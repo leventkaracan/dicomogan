@@ -1,0 +1,172 @@
+project_title: VideoManipulation
+
+model:
+  base_learning_rate: 2.0e-6
+  target: dicomogan.models.tmp_dicomoclip.DiCoMOGANCLIP
+  project : "video-manipulation"
+
+  params:
+    # tgt_text : 'Yellow Dresses Made from polyester with V-neckline. The dress is all over ribbed and has front buttons and is short sleeves. The dress is regular fit'
+    frame_log_size : [256, 192]
+    content_mode : "sample"
+    video_length : 50
+    sampling_type : "Static"
+    n_frames_interpolate : 2
+    n_frames_extrapolate : 2
+    n_sampled_frames : 3
+
+    delta_inversion_weight : 0.01
+    l2_latent_eps : 0.02
+    lambda_vgg: 10.0
+    l2_latent_lambda : 1.0
+
+    clip_loss_lambda: 
+      target: dicomogan.models.utils.LambdaScheduler
+      params:
+        warm_up_steps: 0
+        lr_min: 0.01
+        lr_max: 1.0
+        max_decay_steps: 100000
+
+    consistency_lambda:
+      target: dicomogan.models.utils.LambdaScheduler
+      params:
+        warm_up_steps: 0
+        lr_min: 0.01
+        lr_max: 5.0
+        max_decay_steps: 100000
+
+    rec_loss_lambda:
+      target: dicomogan.models.utils.LambdaScheduler
+      params:
+        warm_up_steps: 50000
+        lr_min: 0.01
+        lr_max: 0.1
+        max_decay_steps: 100000
+    
+
+    perceptual_loss_config:
+      target: dicomogan.losses.splice_vit.SpliceLoss
+      params:
+        structure_lambda : 0.9
+        cls_layer_num : 8
+
+
+    # perceptual_loss_config:
+    #   target: dicomogan.losses.lpips.LPIPS
+    #   params:
+
+    # discriminator_config:
+    #   target: stylegan-v.src.training.networks.Discriminator
+    #   params:
+    #     c_dim : 0                         # Conditioning label (C) dimensionality.
+    #     img_resolution : 96                 # Input resolution.
+    #     img_channels :  3                  # Number of input color channels.
+    #     architecture : 'resnet' # Architecture: 'orig', 'skip', 'resnet'.
+    #     channel_base : 32768    # Overall multiplier for the number of channels.
+    #     channel_max : 256      # Maximum number of channels in any layer.
+
+    modulation_network_config:
+      target: dicomogan.minigpt.CrossAttentionModulation
+      params:
+        shared_attn_params : False
+        out_dim : 512 
+        n_embd : 512 # input dim
+        dyn_attn_n_layer : 6
+        n_layer : 6
+        content_block_size : 1 
+        dyn_block_size : 48 # (img_size[0] // 2 ^ netE_num_downsampling_sp) * (img_size[1] // 2 ^ netE_num_downsampling_sp)
+        n_head : 8
+
+
+
+    video_ecnoder_config:
+      target: dicomogan.new_modules.EncoderVideo_LatentODE
+      params:
+        img_size : [128, 96] # must match video_decoder
+        static_latent_dim : 64 
+        dynamic_latent_dim : 512 # must match ODE_func_config latent_dim
+        hid_channels : 32 
+        kernel_size : 4
+        hidden_dim : 256
+        netE_num_downsampling_sp : 4
+        netE_num_downsampling_gl : 1
+        spatial_code_ch : 256
+        global_code_ch : 512
+
+    stylegan_gen_config:
+      target: dicomogan.models.stylegan.StyleGAN2Generator
+      params:
+        pkl_file: /kuacc/users/abond19/VideoEditing/dicomogan/StyleGAN_Human/ckpts/stylegan_human_v2_1024.pkl
+    
+    #mapping_config:
+    #  target: dicomogan.modules.MappingNetworkVAE
+    #  params:
+    #    input_dim : 64 # must match dynamic_latent + (static_latent - text_latent)
+    #    fsize : 256
+
+    style_mapper_config:
+      target: dicomogan.models.mapper.AttentionAttributeMapper # TripleAttributeMapper
+      params:
+        predict_delta: True
+        use_coarse_mapper: [True, False, False] # Since the coarse mapper only handles pose, we don't want to do any modulation
+        use_medium_mapper: [True, False, False]
+        use_fine_mapper: [True, False, False] 
+        coarse_cut_flag: False 
+        medium_cut_flag: False
+        fine_cut_flag: False
+        mod_shape : [[1, 4, 1], [1, 4, 1], [1, 10, 1]]
+        num_of_layers : [7, 5, 5]
+        attr_vec_dims: [512, 0, 0] #much match W_cont + CLIP embedding
+
+
+    
+data:
+  target: main.DataModuleFromConfig
+  params:
+    batch_size: 2 # MUST Match batch size in dataset
+    num_workers: 20
+    train:
+      target: dicomogan.data.new_video.VideoDataFashion # Changed from data.video.VideoDataFashion to data.new_video.VideoDataFashion
+      params:
+        video_list: data/dummy_fashion.txt
+        img_root: /scratch/users/abond19/datasets/aligned_fashion_dataset
+        inverted_img_root : /scratch/users/abond19/datasets/inverted_fashion_dataset
+        inversion_root: /scratch/users/abond19/datasets/w+_fashion_dataset/fashion/PTI
+        skip_frames : 5
+        n_sampled_frames : 6
+        irregular_sampling : True
+        batch_size : 2 #MUST match batch size 
+        # crop : [512, 384]
+        size : [256, 192]
+        # attribute : "Sleeves"
+        # attribute_stats : 'data/fashion/attributes_stats.yaml'
+
+    validation:
+      target: dicomogan.data.new_video.VideoDataFashion # Changed from data.video.VideoDataFashion to data.new_video.VideoDataFashion
+      params:
+        video_list: data/fashion/sleeves_test_videos.txt
+        img_root: /scratch/users/abond19/datasets/aligned_fashion_dataset
+        inverted_img_root : /scratch/users/abond19/datasets/inverted_fashion_dataset
+        inversion_root: /scratch/users/abond19/datasets/w+_fashion_dataset/fashion/PTI
+        skip_frames : 5
+        n_sampled_frames : 15
+        irregular_sampling : False
+        batch_size : 2 #MUST match batch size 
+        # crop : [512, 384]
+        size : [256, 192]
+        # attribute : "Sleeves"
+        # attribute_stats : 'data/fashion/attributes_stats.yaml'
+
+
+lightning:
+  trainer:
+    limit_val_batches : 2
+    # limit_train_batches : 280
+    replace_sampler_ddp : False
+    # precision : 32
+  
+  modelcheckpoint:
+    params:
+      every_n_epochs : 20
+      save_top_k : -1
