@@ -13,6 +13,7 @@ import torchvision.transforms as transforms
 from torchvision.utils import save_image
 from dicomogan.losses.clip_loss import CLIPLoss
 from dicomogan.losses.loss_lib import GANLoss, VGGLoss, HybridOptim
+from dicomogan.losses.lpips import LPIPS
 from dicomogan.models.utils import ConstScheduler
 import os
 from PIL import Image
@@ -91,7 +92,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         # loss
         # if perceptual_loss_config is not None:
         #     self.criterionVGG = instantiate_from_config(perceptual_loss_config).eval() #  LPIPS().eval()
-        self.criterionVGG = VGGLoss()
+        self.criterionVGG = LPIPS()
         self.requires_grad(self.criterionVGG, False)
 
         self.rec_loss = nn.MSELoss()
