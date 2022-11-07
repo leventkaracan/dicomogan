@@ -781,7 +781,7 @@ if __name__ == "__main__":
         trainer_kwargs["callbacks"] = [
             instantiate_from_config(callbacks_cfg[k], model=model) if k == 'setup_callback' else instantiate_from_config(callbacks_cfg[k])
             for k in callbacks_cfg]
-
+        trainer_kwargs["callbacks"].append(instantiate_from_config(modelckpt_cfg))
         print(trainer_opt)
         print(trainer_kwargs)
         # profiler = AdvancedProfiler(dirpath="./profiler_logs/", filename="short_advanced_profiler_log")
