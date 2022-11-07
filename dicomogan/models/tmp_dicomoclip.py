@@ -227,14 +227,14 @@ class DiCoMOGANCLIP(pl.LightningModule):
         return ret
 
 
-    def forward(self, vid_bf, sampleT, mean_inversion, txt_dir, frame_feat, mask=None, rep_video_dynamics=None):
+    def forward(self, vid_bf, sampleT, mean_inversion, frame_feat, mask=None, rep_video_dynamics=None):
         bs, T, ch, height, width = vid_bf.size()
 
         # repeat features
         tar_T = sampleT.shape[0]
-        txt_feat_tf = txt_dir.unsqueeze(0).repeat(tar_T, 1, 1)
-        txt_feat_tb = txt_feat_tf.contiguous().view(tar_T*bs, -1)
-        txt_dir = txt_feat_tb
+        # txt_feat_tf = txt_dir.unsqueeze(0).repeat(tar_T, 1, 1)
+        # txt_feat_tb = txt_feat_tf.contiguous().view(tar_T*bs, -1)
+        # txt_dir = txt_feat_tb
 
         # extract frame features
         zF_tf = frame_feat.unsqueeze(0).repeat(tar_T, 1, 1)
@@ -255,7 +255,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         frame_dynamics = frame_dynamics.permute(0, 2, 3, 1).contiguous().view(tar_T*bs, -1, frame_dynamics.shape[1]) # T * B x H' * W' x D
         
         # TODO: fix frame rep according to the training step
-        frame_rep = (txt_dir.unsqueeze(1) + frame_feat.unsqueeze(1), frame_dynamics) # T*B x D1+D2
+        frame_rep = (frame_feat.unsqueeze(1), frame_dynamics) # T*B x D1+D2
         conditional_vector = self.modulation_network(*frame_rep)    
 
         # print(conditional_vector[0].shape, mean_inversion.shape)
@@ -349,7 +349,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
 
         # roll batch-wise
         txt_feat_mismatch, _ = self.preprocess_text_feat(txt_feat, mx_roll=2) # T*B x D2
-        txt_dir = 2 * (txt_feat_mismatch - txt_feat)
+        # txt_dir = 2 * (txt_feat_mismatch - txt_feat)
         # vid_mismatch, _ = self.preprocess_text_feat(txt_feat, mx_roll=2) # T*B x D2
         
         # frame rep (video_style, video_content, dynamics)
@@ -358,7 +358,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         # frame_rep_vid_mismatched = torch.cat((txt_feat_mismatch.unsqueeze(1), frame_video_style.unsqueeze(1), frame_dynamics), 1) # T*B x D1+D2
 
         frame_rep = (frame_video_style.unsqueeze(1), frame_dynamics)# T*B x D1+D2
-        frame_rep_txt_mismatched = (txt_dir.unsqueeze(1) + frame_video_style.unsqueeze(1), frame_dynamics) # T*B x D1+D2
+        frame_rep_txt_mismatched = (frame_video_style.unsqueeze(1), frame_dynamics) # T*B x D1+D2
 
         src_inversion_tf = mean_inversion.repeat(n_frames, 1, 1, 1)
         src_inversion = src_inversion_tf.reshape(n_frames*bs, n_channels, dim)
@@ -422,9 +422,9 @@ class DiCoMOGANCLIP(pl.LightningModule):
 
         # directional loss
         directional_clip_loss = 0
-        if self.global_step == 0 or self.clip_loss_lambda(self.global_step) > 0:
-            # TODO: should we use vid_norm_bf or the inversion? 
-            directional_clip_loss = self.clip_loss.directional_loss(vid_norm_bf, txt_feat_bf, imgs_txt_mismatched_inp_res_bf, txt_feat_mismatch_bf, self.global_step, video=True)
+        # if self.global_step == 0 or self.clip_loss_lambda(self.global_step) > 0:
+        #     # TODO: should we use vid_norm_bf or the inversion? 
+        #     directional_clip_loss = self.clip_loss.directional_loss(vid_norm_bf, txt_feat_bf, imgs_txt_mismatched_inp_res_bf, txt_feat_mismatch_bf, self.global_step, video=True)
 
         # consistency loss
         consistency_loss = 0
@@ -523,7 +523,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
 
         # roll batch-wise
         txt_feat_mismatch, _ = self.preprocess_text_feat(txt_feat, mx_roll=2) # T*B x D2
-        txt_dir = 2 * (txt_feat_mismatch - txt_feat)
+        # txt_dir = 2 * (txt_feat_mismatch - txt_feat)
 
         frame_dynamics_swapped = torch.roll(frame_dynamics.view(T, bs, -1, frame_dynamics.shape[-1]).contiguous(), 1, dims=1).view(T*bs, -1, frame_dynamics.shape[-1]) 
         
@@ -533,7 +533,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         # frame_rep_dynamics_swapped= torch.cat((frame_video_style.unsqueeze(1), frame_dynamics_swapped), 1) # T*B x D1+D2
 
         frame_rep = (frame_video_style.unsqueeze(1), frame_dynamics) # T*B x D1+D2
-        frame_rep_txt_mismatched = (txt_dir.unsqueeze(1) + frame_video_style.unsqueeze(1), frame_dynamics) # T*B x D1+D2
+        frame_rep_txt_mismatched = (frame_video_style.unsqueeze(1), frame_dynamics) # T*B x D1+D2
         frame_rep_dynamics_swapped= (frame_video_style.unsqueeze(1), frame_dynamics_swapped) # T*B x D1+D2
         
         conditional_vector = self.modulation_network(*frame_rep)
