@@ -13,7 +13,7 @@ model:
     sampling_type : "Static"
     n_frames_interpolate : 2
     n_frames_extrapolate : 2
-    n_sampled_frames : 3
+    n_sampled_frames : 4
 
     delta_inversion_weight : 0.01
     l2_latent_eps : 0.02
@@ -25,16 +25,16 @@ model:
       params:
         warm_up_steps: 0
         lr_min: 0.01
-        lr_max: 1.0
-        max_decay_steps: 100000
+        lr_max: 2.5
+        max_decay_steps: 50000
 
     consistency_lambda:
       target: dicomogan.models.utils.LambdaScheduler
       params:
         warm_up_steps: 0
         lr_min: 0.01
-        lr_max: 5.0
-        max_decay_steps: 100000
+        lr_max: 1.0
+        max_decay_steps: 40000
 
     rec_loss_lambda:
       target: dicomogan.models.utils.LambdaScheduler
@@ -124,19 +124,19 @@ model:
 data:
   target: main.DataModuleFromConfig
   params:
-    batch_size: 2 # MUST Match batch size in dataset
+    batch_size: 3 # MUST Match batch size in dataset
     num_workers: 20
     train:
       target: dicomogan.data.new_video.VideoDataFashion # Changed from data.video.VideoDataFashion to data.new_video.VideoDataFashion
       params:
-        video_list: data/dummy_fashion.txt
+        video_list: data/fashion/fashion_train_videos.txt
         img_root: /scratch/users/abond19/datasets/aligned_fashion_dataset
         inverted_img_root : /scratch/users/abond19/datasets/inverted_fashion_dataset
         inversion_root: /scratch/users/abond19/datasets/w+_fashion_dataset/fashion/PTI
         skip_frames : 5
-        n_sampled_frames : 6
+        n_sampled_frames : 8
         irregular_sampling : True
-        batch_size : 2 #MUST match batch size 
+        batch_size : 3 #MUST match batch size 
         # crop : [512, 384]
         size : [256, 192]
         # attribute : "Sleeves"
@@ -145,14 +145,14 @@ data:
     validation:
       target: dicomogan.data.new_video.VideoDataFashion # Changed from data.video.VideoDataFashion to data.new_video.VideoDataFashion
       params:
-        video_list: data/fashion/sleeves_test_videos.txt
+        video_list: data/fashion/fashion_test_videos.txt
         img_root: /scratch/users/abond19/datasets/aligned_fashion_dataset
         inverted_img_root : /scratch/users/abond19/datasets/inverted_fashion_dataset
         inversion_root: /scratch/users/abond19/datasets/w+_fashion_dataset/fashion/PTI
         skip_frames : 5
         n_sampled_frames : 15
         irregular_sampling : False
-        batch_size : 2 #MUST match batch size 
+        batch_size : 3 #MUST match batch size 
         # crop : [512, 384]
         size : [256, 192]
         # attribute : "Sleeves"

@@ -77,6 +77,7 @@ def load_model_from_dir(model_dir):
 
 def get_ckpt_path(dic):
     paths = os.listdir(dic)
+    # print(paths)
     name = dic.split('/')[-1]
     if name in paths:
         return get_ckpt_path(os.path.join(dic, name))
@@ -84,8 +85,11 @@ def get_ckpt_path(dic):
         return get_ckpt_path(os.path.join(dic, 'VideoManipulation'))
     elif 'checkpoints' in paths:
         return get_ckpt_path(os.path.join(dic, 'checkpoints'))
-    elif os.path.isfile(os.path.join(dic, paths[0])):
-        return os.path.join(dic, paths[0])
+    elif os.path.isfile(os.path.join(dic, sorted(paths)[-1])):
+        tgt_file = paths[-1]
+        if tgt_file.startwith('last') and len(paths) > 1:
+            tgt_file = paths[-2]
+        return os.path.join(dic, sorted(paths)[-2])
     else:
         return  get_ckpt_path(os.path.join(dic, paths[0]))
 
