@@ -87,7 +87,7 @@ def get_ckpt_path(dic):
         return get_ckpt_path(os.path.join(dic, 'checkpoints'))
     elif os.path.isfile(os.path.join(dic, sorted(paths)[-1])):
         tgt_file = paths[-1]
-        if tgt_file.startwith('last') and len(paths) > 1:
+        if tgt_file.startswith('last') and len(paths) > 1:
             tgt_file = paths[-2]
         return os.path.join(dic, sorted(paths)[-2])
     else:
