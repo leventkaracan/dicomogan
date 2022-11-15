@@ -39,3 +39,21 @@ class StyleGAN2Face(nn.Module):
     
     def forward(self, w):
         return self.G([w], input_is_latent=True, randomize_noise=False)[0]
+
+
+class StyleGAN2Cat(nn.Module):
+    def __init__(self, pkl_file):
+        super().__init__()
+        self.G = Generator(512, 512, 8)
+        self.G.load_state_dict(torch.load(pkl_file, map_location='cpu')['g_ema'], strict=True)
+        self.G.float().eval()
+        for parameter in self.G.parameters():
+            parameter.requires_grad = False
+    
+    def forward(self, w):
+        return self.G([w], input_is_latent=True, randomize_noise=False)[0]
+    
+    def synthesis(self, device):
+        z = torch.from_numpy(np.random.randn(1, self.G.style_dim)).to(device).float()
+        img = self.G([z],  randomize_noise=True)[0]
+        return img

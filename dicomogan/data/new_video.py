@@ -134,7 +134,7 @@ class VideoDataFashion(data.Dataset):
         raw_desc = open(self.desc_paths[index][rnd_txt]).readlines()[0]
 
         # TODO: fix later
-        raw_desc = raw_desc.replace('Multi', 'Multi Color')
+        raw_desc = raw_desc.replace('Multi', '')
         return_list['raw_desc'] = raw_desc
 
         
