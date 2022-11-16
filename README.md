@@ -23,7 +23,7 @@ For more details, you can reach the [paper](https://arxiv.org/abs/2211.02980).
 
 DiCoMOGAN is coded with PyTorch
 
-DiCoMOGAN requires the following installations:
+It requires the following installations:
 
 ```
 python 3.8.3
@@ -88,7 +88,7 @@ If you use this dataset in your work, please cite our work.
 ## Training DiCoMoGAN
 
 
-## Testing DiCoMoGAN*
+## Testing DiCoMoGAN
 
 
 
