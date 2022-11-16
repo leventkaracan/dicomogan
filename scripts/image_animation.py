@@ -167,7 +167,7 @@ def main(args):
 
     # read videos
     videos = read_lines(args.video_list)
-    driving_videos = np.random.choice(videos, args.n_samples, replace=False)
+    driving_videos = np.random.choice(videos, args.spv, replace=False)
     content_frames = np.random.choice(videos, args.n_samples, replace=False)
     
     d_vids, vids_dyns, vids_ts = [], [], []
