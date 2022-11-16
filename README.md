@@ -91,6 +91,7 @@ You can train DiCoMoGAN using the following scripts:
 
 
 run_GAN_fashion_textVAEODE.sh
+
 run_GAN_3dshapes_textVAEODE.sh
 
 
