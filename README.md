@@ -38,9 +38,13 @@ Given a dataset root path in which there are folders containing frames and video
 In the following, we are showing main strucure of dataset folder:
 
 `/dataset_root/<video folders>`
+
 `/dataset_root/train_video.txt`
+
 `/dataset_root/train_video_descriptions.txt`
+
 `/dataset_root/test_video.txt`
+
 `/dataset_root/test_video_descriptions.txt`
 
 
