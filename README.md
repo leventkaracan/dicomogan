@@ -47,7 +47,7 @@ In the following, we are showing main strucure of dataset folder:
 ## Datasets
 
 ### 3dShapes
-First, we use the [3D Shapes dataset] (https://github.com/deepmind/3d-shapes) which is proposed for learning and
+First, we use the [3D Shapes dataset](https://github.com/deepmind/3d-shapes) which is proposed for learning and
 assessing factors of variation from data. This dataset has 480K images of 64 × 64 resolution.
 There are 6 ground truth independent latent factors. They are floor color, wall color, object
 color, scale, shape and orientation. For our purpose, we build simple text descriptions which
@@ -58,7 +58,7 @@ correspond to the first two, middle two and the last two values, respectively. M
 consider the orientation factor as a dynamic dimension taking 15 different values. We have
 19.2K train and 4.8K test videos with 15 frames and simple text descriptions for each video. 
 
-If you use this dataset in your work, please cite related work in [3D Shapes dataset].
+If you use this dataset in your work, please cite related work in [3D Shapes dataset](https://github.com/deepmind/3d-shapes).
 
 
 ### Fashion Video
