@@ -1,6 +1,7 @@
 import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("--model_dir", type=str, required=True)
+parser.add_argument("--run_id", type=str, default="default")
 parser.add_argument("--video_list", type=str, default="data/fashion/fashion_test_videos.txt")
 parser.add_argument("--output_dir", type=str, default="supp_experiments")
 parser.add_argument("--img_root", type=str, default="/scratch/users/abond19/datasets/aligned_fashion_dataset")
@@ -10,7 +11,6 @@ parser.add_argument("--n_frames", type=int, default=30)
 parser.add_argument("--n_step", type=int, default=1)
 parser.add_argument("--device", type=str, default='cuda')
 parser.add_argument("--spv", type=int, default=4)
-parser.add_argument("--run_id", type=str, default="default")
 parser.add_argument("--n_samples", type=int, default=6)
 
 
@@ -117,11 +117,16 @@ def save_gif(video, range, save_path):
 #     wandb.log({name: wandb.Video(filename, fps=2, format="gif")})
 #     os.remove(filename)
 
-def concat_and_save_gif(videos, titles, val_range, save_path):
+def concat_and_save_gif(driving_videos, videos, ref_frame, titles, val_range, save_path):
+    names = ['Reference frame']
+    print(titles)
+    print(type(titles))
+    names.extend(titles)
+    print(names)
     # Assuming that the current shape is T * B x C x H x W
     all_frames = []
     for i in range(videos[0].shape[0]):
-        frames = []
+        frames = [to_PIL(ref_frame)]
         for j, video in enumerate(videos):
             # b_frames B x C x H x W
             b_frame = torch.clamp(video[i], val_range[0], val_range[1])
@@ -131,8 +136,26 @@ def concat_and_save_gif(videos, titles, val_range, save_path):
                             range=val_range).detach().cpu().numpy()
             frame = Image.fromarray((np.transpose(frame, (1, 2, 0)) * 255).astype(np.uint8))
             frames.append(frame)
-        all_frames.append(stack_imgs(frames, titles))
-    all_frames[0].save(save_path, save_all=True, append_images =all_frames[1:], duration=100, loop=0)
+        all_frames.append(stack_imgs(frames))
+    
+    all_driving = []
+    for i in range(videos[0].shape[0]):
+        frames = [Image.new('RGB', (ref_frame.shape[2], ref_frame.shape[1]))]
+        for j, video in enumerate(driving_videos):
+            # b_frames B x C x H x W
+            b_frame = torch.clamp(video[i], val_range[0], val_range[1])
+            frame = torchvision.utils.make_grid(b_frame,
+                            nrow=b_frame.shape[0],
+                            normalize=True,
+                            range=val_range).detach().cpu().numpy()
+            frame = Image.fromarray((np.transpose(frame, (1, 2, 0)) * 255).astype(np.uint8))
+            frames.append(frame)
+        all_driving.append(stack_imgs(frames, names))
+    
+    final_output = []
+    for i in range(len(all_frames)):
+        final_output.append(stack_imgs_vertical([all_driving[i], all_frames[i]]))
+    final_output[0].save(save_path, save_all=True, append_images =final_output[1:], duration=100, loop=0)
             
 
 def display_gif(path):
@@ -150,7 +173,7 @@ def main(args):
     driving_videos = np.random.choice(videos, args.n_samples, replace=False)
     content_frames = np.random.choice(videos, args.n_samples, replace=False)
     
-    vids_dyns, vids_ts = [], []
+    d_vids, vids_dyns, vids_ts = [], [], []
     all_videos = []
     # process
     for driving_video in driving_videos: 
@@ -161,6 +184,7 @@ def main(args):
         dyn = model.video_dynamic_rep(d_vid.unsqueeze(0), ts_norm, mask=torch.ones(d_vid.shape[0], 1)) 
         vids_dyns.append(dyn)
         vids_ts.append(d_ts)
+        d_vids.append(d_vid * 2  - 1)
         save_path = f'{save_dir}/driving_{driving_video}.gif'
         save_gif(d_vid, (0, 1), save_path)
     
@@ -173,7 +197,8 @@ def main(args):
         invs, vid_imgs = [], []
         vid_img, vid_inversions, _, desc1 = load_video(args, video)
         # print("vid img", vid_img.shape)
-        ind = np.random.randint(vid_img.shape[1])
+        ind = np.random.randint(vid_img.shape[0]-5) + 5
+        print(vid_img.shape, ind)
         ref_frame_inversion = vid_inversions[ind:ind+1] # 1 x 1 x 18 x 512
         invs.append(ref_frame_inversion)
         vid_imgs.append(vid_img)
@@ -197,7 +222,7 @@ def main(args):
             save_gif(out[0], (-1, 1), save_path)
 
             all_videos.append(out[0])
-        concat_and_save_gif(all_videos, driving_videos, (-1, 1), f'{save_dir}/demo_{video}.gif')
+        concat_and_save_gif(d_vids, all_videos, ref_frame[0], driving_videos, (-1, 1), f'{save_dir}/demo_{video}.gif')
 
 
 
