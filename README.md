@@ -35,7 +35,7 @@ cuda 11.1
 ## Data Structure
 
 Given a dataset root path in which there are folders containing frames and video list  and corresponding descriptions, you can train your own model.
-In the following, we are showing main strucure of dataset folder:
+In the following, we are showing main structure of dataset folder:
 
 `/dataset_root/<video folders>`
 
@@ -87,10 +87,12 @@ If you use this dataset in your work, please cite our work.
 
 ## Training DiCoMoGAN
 
+You can train DiCoMoGAN using train.sh script. Y
+
 
 ## Testing DiCoMoGAN
 
-
+You can test DiCoMoGAN using train.sh script. You can reach pre-trained model through this [link]().
 
 ## Publications
 
