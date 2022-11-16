@@ -89,12 +89,14 @@ If you use this dataset in your work, please cite our work.
 
 You can train DiCoMoGAN using the following scripts:
 
-run_train_GAN_fashion_latentode2im.sh
+
+run_GAN_fashion_textVAEODE.sh
+run_GAN_3dshapes_textVAEODE.sh
 
 
 ## Testing DiCoMoGAN
 
-You can test DiCoMoGAN using train.sh script. You can reach pre-trained model through this [link]().
+You can test DiCoMoGAN using test.sh script. You can reach pre-trained model through this [link]().
 
 ## Publications
 
