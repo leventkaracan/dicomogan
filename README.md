@@ -87,7 +87,7 @@ If you use this dataset in your work, please cite our work.
 
 ## Training DiCoMoGAN
 
-You can train DiCoMoGAN using the following scripts:
+You can train DiCoMoGAN using the following scripts for Fashion Video and 3dShapes datasets:
 
 
 `run_GAN_fashion_textVAEODE.sh`
