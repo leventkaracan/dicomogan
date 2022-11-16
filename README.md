@@ -87,7 +87,9 @@ If you use this dataset in your work, please cite our work.
 
 ## Training DiCoMoGAN
 
-You can train DiCoMoGAN using train.sh script. Y
+You can train DiCoMoGAN using the following scripts:
+
+run_train_GAN_fashion_latentode2im.sh
 
 
 ## Testing DiCoMoGAN
