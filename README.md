@@ -78,7 +78,7 @@ of the html files by extracting the hierarchy and info sections of the items. Th
 descriptions give details about its color, material properties and design details. We only
 manually removed the repetitive or ill-suited words from the descriptions. 
 
-# Please send [us](levent.karacan@iste.edu.tr) a request e-mail to download dataset.
+#### Please send [us](levent.karacan@iste.edu.tr) a request e-mail to download dataset.
 
 ![](fashion.png)
 
