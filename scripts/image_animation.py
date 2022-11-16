@@ -119,10 +119,7 @@ def save_gif(video, range, save_path):
 
 def concat_and_save_gif(driving_videos, videos, ref_frame, titles, val_range, save_path):
     names = ['Reference frame']
-    print(titles)
-    print(type(titles))
     names.extend(titles)
-    print(names)
     # Assuming that the current shape is T * B x C x H x W
     all_frames = []
     for i in range(videos[0].shape[0]):
@@ -198,7 +195,6 @@ def main(args):
         vid_img, vid_inversions, _, desc1 = load_video(args, video)
         # print("vid img", vid_img.shape)
         ind = np.random.randint(vid_img.shape[0]-5) + 5
-        print(vid_img.shape, ind)
         ref_frame_inversion = vid_inversions[ind:ind+1] # 1 x 1 x 18 x 512
         invs.append(ref_frame_inversion)
         vid_imgs.append(vid_img)
