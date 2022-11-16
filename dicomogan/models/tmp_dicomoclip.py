@@ -228,7 +228,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
 
 
     def forward(self, vid_bf, sampleT, mean_inversion, txt_dir, frame_feat, mask=None, rep_video_dynamics=None):
-        bs, T, ch, height, width = vid_bf.size()
+        bs = frame_feat.shape[0]
 
         # repeat features
         tar_T = sampleT.shape[0]
@@ -240,16 +240,17 @@ class DiCoMOGANCLIP(pl.LightningModule):
         zF_tf = frame_feat.unsqueeze(0).repeat(tar_T, 1, 1)
         zF_tb = zF_tf.contiguous().view(tar_T*bs, -1)
         frame_feat = zF_tb 
-
         
         # videos reshape
         ts = (sampleT) / self.video_length
         ts = ts - ts[0]
-        if mask is None:
-            mask = torch.ones(T, 1)
+
 
         # vae encode frames
         if rep_video_dynamics is None:
+            bs, T, ch, height, width = vid_bf.size()
+            if mask is None:
+                mask = torch.ones(T, 1)
             rep_video_dynamics = self.video_dynamic_rep(vid_bf, ts, mask=mask) 
         frame_dynamics = self.sample_frames_dynamics(rep_video_dynamics, ts) # T * B x D x H' x W'
         frame_dynamics = frame_dynamics.permute(0, 2, 3, 1).contiguous().view(tar_T*bs, -1, frame_dynamics.shape[1]) # T * B x H' * W' x D
@@ -349,7 +350,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
 
         # roll batch-wise
         txt_feat_mismatch, _ = self.preprocess_text_feat(txt_feat, mx_roll=2) # T*B x D2
-        txt_dir = 2 * (txt_feat_mismatch - txt_feat)
+        txt_dir = 1 * (txt_feat_mismatch - txt_feat)
         # vid_mismatch, _ = self.preprocess_text_feat(txt_feat, mx_roll=2) # T*B x D2
         
         # frame rep (video_style, video_content, dynamics)
@@ -395,7 +396,9 @@ class DiCoMOGANCLIP(pl.LightningModule):
         # structure/style loss
         style_loss, structure_loss = 0, 0
         structure_loss += self.criterionVGG.structure_loss(reconstruction_inp_res.contiguous() / 2 + 0.5, video_sample.contiguous().detach()).mean()
-        structure_loss += self.criterionVGG.structure_loss(imgs_txt_mismatched_inp_res.contiguous() / 2 + 0.5, video_sample.contiguous().detach()).mean()
+
+        # TODO: activate structure loss on mismatched
+        structure_loss += 0.2 * self.criterionVGG.structure_loss(imgs_txt_mismatched_inp_res.contiguous() / 2 + 0.5, video_sample.contiguous().detach()).mean()
         # structure_loss += self.criterionVGG.structure_loss(img_frame_mismatched_inp_res.contiguous() / 2 + 0.5, video_sample.contiguous().detach()).mean()
 
         style_loss += self.criterionVGG.style_loss(reconstruction_inp_res.contiguous() / 2 + 0.5, ref_frame.repeat(bs*T, 1, 1, 1).contiguous().detach()).mean()
@@ -523,7 +526,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
 
         # roll batch-wise
         txt_feat_mismatch, _ = self.preprocess_text_feat(txt_feat, mx_roll=2) # T*B x D2
-        txt_dir = 2 * (txt_feat_mismatch - txt_feat)
+        txt_dir = 1 * (txt_feat_mismatch - txt_feat)
 
         frame_dynamics_swapped = torch.roll(frame_dynamics.view(T, bs, -1, frame_dynamics.shape[-1]).contiguous(), 1, dims=1).view(T*bs, -1, frame_dynamics.shape[-1]) 
         

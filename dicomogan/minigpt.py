@@ -340,9 +340,6 @@ class CrossAttentionModulation(nn.Module):
             x[0] = blks[0](x[0], y)
             x[1] = blks[1](x[1], y)
 
-            # TODO: remove dynamic modulation on the fine layers
-            # x[2] = blks[2](x[2], y)
-
 
         # cls token
         cls_token = [self.head[0](self.ln_f[0](x[0][:, 0])),
