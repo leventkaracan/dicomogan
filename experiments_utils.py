@@ -87,8 +87,8 @@ def get_ckpt_path(dic):
         return get_ckpt_path(os.path.join(dic, 'checkpoints'))
     elif os.path.isfile(os.path.join(dic, sorted(paths)[-1])):
         tgt_file = sorted(paths)[-1]
-        # if tgt_file.startswith('last') and len(paths) > 1:
-        #     tgt_file = sorted(paths)[-2]
+        if tgt_file.startswith('last') and len(paths) > 1:
+            tgt_file = sorted(paths)[-2]
         return os.path.join(dic, tgt_file)
     else:
         return  get_ckpt_path(os.path.join(dic, paths[0]))
@@ -111,6 +111,12 @@ def load_config(config_path, display=False):
 def read_lines(file_path):
     with open(file_path, 'r') as f:
         return f.read().split('\n')
+
+def write_lines(lst, file_path):
+    with open(file_path, 'w') as f:
+        for el in lst:
+            f.write(el)
+            f.write('\n')
 
 def stack_imgs(Xs, titles=[], c = 30):
     w, h = Xs[0].size[0], Xs[0].size[1]

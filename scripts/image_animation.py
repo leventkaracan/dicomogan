@@ -10,7 +10,7 @@ parser.add_argument("--n_start", type=int, default=5)
 parser.add_argument("--n_frames", type=int, default=30)
 parser.add_argument("--n_step", type=int, default=1)
 parser.add_argument("--device", type=str, default='cuda')
-parser.add_argument("--spv", type=int, default=4)
+parser.add_argument("--spv", type=int, default=10)
 parser.add_argument("--n_samples", type=int, default=6)
 
 
