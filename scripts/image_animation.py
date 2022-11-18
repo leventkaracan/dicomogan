@@ -2,7 +2,7 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("--model_dir", type=str, required=True)
 parser.add_argument("--run_id", type=str, default="default")
-parser.add_argument("--video_list", type=str, default="data/fashion/fashion_test_videos.txt")
+parser.add_argument("--video_list", type=str, default="data/fashion/fashion_train_videos.txt")
 parser.add_argument("--output_dir", type=str, default="supp_experiments")
 parser.add_argument("--img_root", type=str, default="/scratch/users/abond19/datasets/aligned_fashion_dataset")
 parser.add_argument("--inversion_root", type=str, default="/scratch/users/abond19/datasets/w+_fashion_dataset/fashion/PTI")
@@ -10,8 +10,8 @@ parser.add_argument("--n_start", type=int, default=5)
 parser.add_argument("--n_frames", type=int, default=30)
 parser.add_argument("--n_step", type=int, default=1)
 parser.add_argument("--device", type=str, default='cuda')
-parser.add_argument("--spv", type=int, default=10)
-parser.add_argument("--n_samples", type=int, default=6)
+parser.add_argument("--spv", type=int, default=6)
+parser.add_argument("--n_samples", type=int, default=20)
 
 
 # load images
