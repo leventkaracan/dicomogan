@@ -89,7 +89,7 @@ You can train DiCoMoGAN using the following scripts for Fashion Video and 3dShap
 
 ## Testing DiCoMoGAN
 
-You can test DiCoMoGAN using test.sh script. You can reach pre-trained model for  [Fashion Dataset](https://drive.google.com/file/d/1ExFeyvRsm76etb58PILW0--ZrD-OY9pz/view?usp=sharing) and [3D Shapes Dateset](https://drive.google.com/file/d/1CqntgFrMo4Rs3m897yzyCdFx4L6M_Jch/view?usp=sharing).
+You can test DiCoMoGAN using test.sh script. You can reach pre-trained [Fashion model](https://drive.google.com/file/d/1ExFeyvRsm76etb58PILW0--ZrD-OY9pz/view?usp=sharing) and [3D Shapes model](https://drive.google.com/file/d/1CqntgFrMo4Rs3m897yzyCdFx4L6M_Jch/view?usp=sharing).
 
 ## Publications
 
