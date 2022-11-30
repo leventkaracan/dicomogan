@@ -89,17 +89,16 @@ You can train DiCoMoGAN using the following scripts for Fashion Video and 3dShap
 
 ## Testing DiCoMoGAN
 
-You can test DiCoMoGAN using test.sh script. You can reach pre-trained model for  [Fashion Dataset](https://drive.google.com/file/d/1ExFeyvRsm76etb58PILW0--ZrD-OY9pz/view?usp=sharing) and [3D Shapes Dateset](Fashion).
+You can test DiCoMoGAN using test.sh script. You can reach pre-trained model for  [Fashion Dataset](https://drive.google.com/file/d/1ExFeyvRsm76etb58PILW0--ZrD-OY9pz/view?usp=sharing) and [3D Shapes Dateset](https://drive.google.com/file/d/1CqntgFrMo4Rs3m897yzyCdFx4L6M_Jch/view?usp=sharing).
 
 ## Publications
 
 Please cite the following paper if you use DiCoMOGAN and proposed Fashion Dataset.
 
 ```
-@article{karacan2022disentangling,
-  title={Disentangling Content and Motion for Text-Based Neural Video Manipulation},
-  author={Karacan, Levent and Kerimo{\u{g}}lu, Tolga and {\.I}nan, {\.I}smail and Birdal, Tolga and Erdem, Erkut and Erdem, Aykut},
-  journal={arXiv preprint arXiv:2211.02980},
-  year={2022}
-}
+    @inproceedings{Karacan_2022_BMVC,
+    author    = {Levent Karacan and Tolga  Kerimoğlu and İsmail Ata İnan and Tolga Birdal and Erkut Erdem and Aykut Erdem},
+    title     = {Disentangling Content and Motion for Text-Based Neural Video Manipulation},
+    booktitle = {British Machine Vision Conference (BMVC)},
+    year      = {2022}}
 ```
