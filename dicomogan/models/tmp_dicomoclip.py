@@ -47,7 +47,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
                     n_critic = 1,
                     ckpt_path=None,
                     content_mode = 'mean_inv',
-                    ignore_keys=list("stylegan_G"), 
+                    ignore_keys=[], 
                     video_length = 6,
                     frame_log_size=(1024, 512),
                     sampling_type="Static",
@@ -79,8 +79,11 @@ class DiCoMOGANCLIP(pl.LightningModule):
         self.bVAE_enc = instantiate_from_config(video_ecnoder_config) 
         self.style_mapper = instantiate_from_config(style_mapper_config)
         self.stylegan_G = instantiate_from_config(stylegan_gen_config)
-        self.modulation_network = instantiate_from_config(modulation_network_config)
         self.requires_grad(self.stylegan_G, False)
+
+        self.modulation_network = instantiate_from_config(modulation_network_config)
+        
+        # print("stylegan param", list(self.stylegan_G.parameters())[:2])
         
         # temporal discriminator
         self.temporal_discriminator = None
@@ -101,6 +104,15 @@ class DiCoMOGANCLIP(pl.LightningModule):
         
         if ckpt_path is not None:
             self.init_from_ckpt(ckpt_path, ignore_keys=ignore_keys)
+        
+        self.stylegan_gen_config = stylegan_gen_config
+        self.stylegan_G = instantiate_from_config(stylegan_gen_config)
+        self.requires_grad(self.stylegan_G, False)
+        # print("stylegan param after init", list(self.stylegan_G.parameters())[:2])
+
+    def reset_stylegan(self):
+        self.stylegan_G = instantiate_from_config(self.stylegan_gen_config)
+        self.requires_grad(self.stylegan_G, False)
 
     def prepare_scheduler(self, val):
         if isinstance(val, float):
@@ -171,7 +183,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         texts = self.clip_loss.tokenize(texts).to(self.device)
         return self.clip_loss.encode_text(texts).float()
     
-    def init_from_ckpt(self, path, ignore_keys=list("stylegan_G")):
+    def init_from_ckpt(self, path, ignore_keys=[]):
         sd = torch.load(path, map_location="cpu")["state_dict"]
         keys = list(sd.keys())
         # print(keys)
@@ -275,6 +287,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         return mask
 
     def training_step(self, batch, batch_idx):
+        # print("First log - stylegan param", list(self.stylegan_G.parameters())[:2])
         input_desc = batch['raw_desc'] # B
 
         # videos reshape

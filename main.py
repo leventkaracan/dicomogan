@@ -1,14 +1,22 @@
 # hard coded for now 
 from random import shuffle
 import sys
-paths, ainaz_paths = [], []
-for path in sys.path:
-    if 'ajamshidi' in path:
-        ainaz_paths.append(path)
-    else:
-        paths.append(path)
-sys.path = paths
-
+paths, ainaz_paths, abond_paths = [], [], []
+# for path in sys.path:
+#     # if 'abond' in path:
+#     #     abond_paths.append(path)
+#     if 'ajamshidi' in path:
+#         ainaz_paths.append(path)
+#     else:
+#         paths.append(path)
+# sys.path = paths[0:1] + ['/kuacc/users/abond19/.conda/envs/taming/lib/python3.8/site-packages'] + paths[1:] 
+print(sys.path)
+import PIL
+# # TODO: This does not make any f sense
+# try:
+#     import pytorch_lightning
+# except:
+#     print("could not import torch. retrying...")
 
 import matplotlib
 matplotlib.use('Agg')
@@ -208,7 +216,9 @@ class DataModuleFromConfig(pl.LightningDataModule):
 
     def prepare_data(self):
         for data_cfg in self.dataset_configs.values():
+            print(data_cfg)
             instantiate_from_config(data_cfg, **self.dataset_kwargs)
+            print("finished")
 
     def setup(self, stage=None):
         self.datasets = dict(
@@ -470,7 +480,9 @@ class ImageLogger(Callback):
         """
         obtain evaluated images from the model and pass them to the logger
         """
-        if (self.check_frequency(batch_idx) and  # batch_idx % self.batch_freq == 0
+        log = (split == 'train' and self.check_frequency(batch_idx)) or \
+                 (split == 'val' and self.check_frequency(batch_idx))
+        if ( log and  # batch_idx % self.batch_freq == 0
                 hasattr(pl_module, "log_images") and
                 callable(pl_module.log_images) and
                 self.max_images > 0):
@@ -654,17 +666,15 @@ if __name__ == "__main__":
         
         print("Init model")
         # model
-        # print(config.model.params)
-        if opt.resume:
-            print(f"Loading model from ckpt f{ckpt}")
-            model = instantiate_from_config(config.model, custom_loggers=loggers, ckpt_path=ckpt)
-            # model = model.load_from_checkpoint(ckpt, **config.model.params, strict=opt.strict)
-            # print(f"Ckpt loaded from f{ckpt}")
-        else:
-
-            model = instantiate_from_config(config.model, custom_loggers=loggers)
+        print(config.model.params)
+        model = instantiate_from_config(config.model, custom_loggers=loggers)
         
         print("Finished init model")
+        
+        if opt.resume:
+            print(f"Loading model from ckpt f{ckpt}")
+            model = model.load_from_checkpoint(ckpt, **config.model.params, strict=opt.strict)
+            print(f"Ckpt loaded from f{ckpt}")
         # trainer and callbacks
         trainer_kwargs = dict()
 
@@ -771,7 +781,7 @@ if __name__ == "__main__":
         trainer_kwargs["callbacks"] = [
             instantiate_from_config(callbacks_cfg[k], model=model) if k == 'setup_callback' else instantiate_from_config(callbacks_cfg[k])
             for k in callbacks_cfg]
-
+        trainer_kwargs["callbacks"].append(instantiate_from_config(modelckpt_cfg))
         print(trainer_opt)
         print(trainer_kwargs)
         # profiler = AdvancedProfiler(dirpath="./profiler_logs/", filename="short_advanced_profiler_log")
@@ -806,6 +816,7 @@ if __name__ == "__main__":
         data.prepare_data()
         data.setup()
 
+        print("Done seting up data", flush=True)
 
         # allow checkpointing via USR1
         def melk(*args, **kwargs):
