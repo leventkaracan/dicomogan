@@ -47,7 +47,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
                     n_critic = 1,
                     ckpt_path=None,
                     content_mode = 'mean_inv',
-                    ignore_keys=[], 
+                    ignore_keys=list("stylegan_G"), 
                     video_length = 6,
                     frame_log_size=(1024, 512),
                     sampling_type="Static",
@@ -56,6 +56,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
                     ):
         super().__init__()
 
+        # print("stylegan", stylegan_gen_config)
         self.sampling_type = sampling_type
         self.n_frames_interp = n_frames_interpolate
         self.n_frames_ext = n_frames_extrapolate
@@ -170,9 +171,10 @@ class DiCoMOGANCLIP(pl.LightningModule):
         texts = self.clip_loss.tokenize(texts).to(self.device)
         return self.clip_loss.encode_text(texts).float()
     
-    def init_from_ckpt(self, path, ignore_keys=list()):
+    def init_from_ckpt(self, path, ignore_keys=list("stylegan_G")):
         sd = torch.load(path, map_location="cpu")["state_dict"]
         keys = list(sd.keys())
+        # print(keys)
         for k in keys:
             for ik in ignore_keys:
                 if k.startswith(ik):

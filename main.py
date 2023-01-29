@@ -654,15 +654,17 @@ if __name__ == "__main__":
         
         print("Init model")
         # model
-        print(config.model.params)
-        model = instantiate_from_config(config.model, custom_loggers=loggers)
-        
-        print("Finished init model")
-        
+        # print(config.model.params)
         if opt.resume:
             print(f"Loading model from ckpt f{ckpt}")
-            model = model.load_from_checkpoint(ckpt, **config.model.params, strict=opt.strict)
-            print(f"Ckpt loaded from f{ckpt}")
+            model = instantiate_from_config(config.model, custom_loggers=loggers, ckpt_path=ckpt)
+            # model = model.load_from_checkpoint(ckpt, **config.model.params, strict=opt.strict)
+            # print(f"Ckpt loaded from f{ckpt}")
+        else:
+
+            model = instantiate_from_config(config.model, custom_loggers=loggers)
+        
+        print("Finished init model")
         # trainer and callbacks
         trainer_kwargs = dict()
 
@@ -776,7 +778,10 @@ if __name__ == "__main__":
         # trainer = Trainer.from_argparse_args(trainer_opt, **trainer_kwargs, strategy=DDPPlugin(find_unused_parameters=False), 
         #                                      profiler=profiler)
         
-        trainer = Trainer.from_argparse_args(trainer_opt, **trainer_kwargs, strategy=DDPPlugin(find_unused_parameters=False))
+        if opt.resume:
+            trainer = Trainer.from_argparse_args(trainer_opt, **trainer_kwargs, strategy=DDPPlugin(find_unused_parameters=False), resume_from_checkpoint=ckpt)
+        else:
+            trainer = Trainer.from_argparse_args(trainer_opt, **trainer_kwargs, strategy=DDPPlugin(find_unused_parameters=False))
         # configure learning rate
         bs, base_lr = config.data.params.batch_size, config.model.base_learning_rate
         print("Batch size:", bs)

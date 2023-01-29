@@ -84,9 +84,9 @@ data:
       target: dicomogan.data.new_video.VideoDataFashion # Changed from data.video.VideoDataFashion to data.new_video.VideoDataFashion
       params:
         video_list: data/fashion/fashion_train_videos.txt
-        img_root: /kuacc/users/abond19/datasets/aligned_fashion_dataset
-        inverted_img_root : /kuacc/users/abond19/datasets/inverted_fashion_dataset
-        inversion_root: /kuacc/users/abond19/datasets/w+_fashion_dataset/fashion/PTI/
+        img_root: /userfiles/abond19/video_datasets/RAVDESS/RAVDESS/Aligned
+        inverted_img_root : /kuacc/users/abond19/VideoEditing/RAVDESS_inversion_prev/image_inversions
+        inversion_root: /kuacc/users/abond19/VideoEditing/RAVDESS_inversion_prev/w+_inversions
         skip_frames : 5
         n_sampled_frames : 6
         irregular_sampling : True
@@ -100,9 +100,9 @@ data:
       target: dicomogan.data.new_video.VideoDataFashion # Changed from data.video.VideoDataFashion to data.new_video.VideoDataFashion
       params:
         video_list: data/fashion/fashion_test_videos.txt
-        img_root: /kuacc/users/abond19/datasets/aligned_fashion_dataset
-        inverted_img_root : /kuacc/users/abond19/datasets/inverted_fashion_dataset
-        inversion_root: /kuacc/users/abond19/datasets/w+_fashion_dataset/fashion/PTI/
+        img_root: /userfiles/abond19/video_datasets/RAVDESS/RAVDESS/Aligned
+        inverted_img_root : /kuacc/users/abond19/VideoEditing/RAVDESS_inversion_prev/image_inversions
+        inversion_root: /kuacc/users/abond19/VideoEditing/RAVDESS_inversion_prev/w+_inversions
         skip_frames : 5
         n_sampled_frames : 10
         irregular_sampling : False
