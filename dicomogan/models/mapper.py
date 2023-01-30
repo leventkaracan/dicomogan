@@ -313,6 +313,7 @@ class AttentionAttributeMapper(nn.Module):
                 mod_shape = [[1], [1], [1]], 
                 num_of_layers = [5, 5, 5],
                 modtype='mfmod',
+                inversion_layer_num = [4, 4, 10],
                 predict_delta=True):
         super(AttentionAttributeMapper, self).__init__()
         self.use_coarse_mapper = np.array(use_coarse_mapper)
@@ -325,9 +326,9 @@ class AttentionAttributeMapper(nn.Module):
         self.attr_vec_dims = np.array(attr_vec_dims)
         self.predict_delta = predict_delta
         
-        self.coarse_mapping = AttributeMapperSubModule(self.attr_vec_dims, 4, self.use_coarse_mapper, self.coarse_cut_flag, mod_shape=mod_shape[0], modtype=modtype, num_of_layers=num_of_layers[0])
-        self.medium_mapping = AttributeMapperSubModule(self.attr_vec_dims, 4, self.use_medium_mapper, self.medium_cut_flag, mod_shape=mod_shape[1], modtype=modtype, num_of_layers=num_of_layers[1])
-        self.fine_mapping = AttributeMapperSubModule(self.attr_vec_dims, 10, self.use_fine_mapper, self.fine_cut_flag, mod_shape=mod_shape[2], modtype=modtype, num_of_layers=num_of_layers[2])
+        self.coarse_mapping = AttributeMapperSubModule(self.attr_vec_dims, inversion_layer_num[0], self.use_coarse_mapper, self.coarse_cut_flag, mod_shape=mod_shape[0], modtype=modtype, num_of_layers=num_of_layers[0])
+        self.medium_mapping = AttributeMapperSubModule(self.attr_vec_dims, inversion_layer_num[1], self.use_medium_mapper, self.medium_cut_flag, mod_shape=mod_shape[1], modtype=modtype, num_of_layers=num_of_layers[1])
+        self.fine_mapping = AttributeMapperSubModule(self.attr_vec_dims, inversion_layer_num[2], self.use_fine_mapper, self.fine_cut_flag, mod_shape=mod_shape[2], modtype=modtype, num_of_layers=num_of_layers[2])
     
     def forward(self, x, conditional_vectors):
         x_coarse = x[:, :4, :]

@@ -12,8 +12,7 @@ import torchvision.transforms.functional as func
 import random
 import glob
 import yaml
-
-IMG_EXTENSIONS = ['.png', '.PNG']
+IMG_EXTENSIONS = ['.png', '.PNG', '.jpg']
 TXT_EXTENSIONS = ['.txt']
 
 def split_sentence_into_words(sentence):
@@ -77,18 +76,36 @@ class VideoDataFashion(data.Dataset):
     def _load_dataset(self):
         data_paths, inverted_img_paths, inversion_paths, desc_paths, frame_numbers, attributes = [], [], [], [], [], []
         intersection = None
+        videos = []
         for idx, vid_path in enumerate(self.video_list):
             paths, im_paths, i_paths, d_paths, f_nums = {}, {}, {}, [], []
             fname = vid_path[:-1]
+            mn_idx = None
+            # print(os.path.join(self.img_root, fname), len(os.listdir(os.path.join(self.img_root, fname))))
             for f in sorted(os.listdir(os.path.join(self.img_root, fname)))[self.skip_frames:]:
                 if is_image_file(f):
                     imname = f[:-4]
+                    if '_' in imname:
+                        imname = imname.split('_')[-1]
+                    while not imname[0].isdigit():
+                        imname = imname[1:]
+                    while not imname[-1].isdigit():
+                        imname = imname[:-1] 
+                    imname = int(imname)
+
+                    # normalize idx 
+                    if mn_idx is None:
+                        mn_idx = imname
+                        imname = 0
+                    else:
+                        imname -= mn_idx
+                    
                     paths[int(imname)] = os.path.join(self.img_root, fname, f)
-                    im_paths[int(imname)] = os.path.join(self.inverted_img_root, fname, f)
+                    im_paths[int(imname)] = os.path.join(self.inverted_img_root, fname, f"{f[:-4]}.png")
                     f_nums.append(int(imname))
 
                     if self.inversion_root is not None:
-                        i_paths[int(imname)] = os.path.join(os.path.join(self.inversion_root, fname, imname + ".pt"))
+                        i_paths[int(imname)] = os.path.join(os.path.join(self.inversion_root, fname, f[:-4] + ".pt"))
                 elif is_text_file(f) and f == 'updated_descriptions.txt': # TODO: hard code for now 
                     d_paths.append(os.path.join(self.img_root, fname, f))
             
@@ -105,12 +122,18 @@ class VideoDataFashion(data.Dataset):
             inverted_img_paths.append(im_paths)
             inversion_paths.append(i_paths)
             desc_paths.append(sorted(d_paths))
+            # print(f_nums)
             intersection = set(sorted(f_nums)) if intersection is None else intersection.intersection(set(sorted(f_nums)))
+            videos.append(vid_path)
             if (idx+1) % self.batch_size == 0:
                 frame_numbers.append(sorted(list(intersection)))
                 intersection = None
+                videos = []
 
         if intersection is not None:
+            if len(intersection) < 20:
+                print("Hereeeeeeee")
+                print(videos)
             frame_numbers.append(sorted(list(intersection)))
         return data_paths, inverted_img_paths, inversion_paths, desc_paths, frame_numbers, attributes
 
@@ -128,17 +151,19 @@ class VideoDataFashion(data.Dataset):
         # adjust index accoridng to num of gpus 
         index = (index // self.num_gpus) + (index % self.num_gpus) * ((len(self) // self.num_gpus) // self.batch_size) * self.batch_size
         return_list = {}
+
         # load text 
-        rnd_txt = np.random.randint(len(self.desc_paths[index]))
-        raw_desc = open(self.desc_paths[index][rnd_txt]).readlines()[0]
+        if index in self.desc_paths:
+            rnd_txt = np.random.randint(len(self.desc_paths[index]))
+            raw_desc = open(self.desc_paths[index][rnd_txt]).readlines()[0]
+        else:
+            raw_desc = "None"
 
         # TODO: fix later
         raw_desc = raw_desc.replace('Multi', 'Multi Color')
         return_list['raw_desc'] = raw_desc
 
         
-
-
         # load attribute
         if self.attribute is not None:
             attribute = self.attributes[index]
@@ -148,9 +173,13 @@ class VideoDataFashion(data.Dataset):
         bin = index // self.batch_size
         local_state = np.random.RandomState(bin + self.base_seed)
         if self.irregular_sampling:
-            sampleT = local_state.choice(self.frame_numbers[bin][1:], self.n_sampled_frames-1, replace=False)
-            sampleT = np.append(sampleT, self.frame_numbers[bin][0])
-            sampleT = np.sort(sampleT)
+            try:
+                sampleT = local_state.choice(self.frame_numbers[bin][1:], self.n_sampled_frames-1, replace=False)
+                sampleT = np.append(sampleT, self.frame_numbers[bin][0])
+                sampleT = np.sort(sampleT)
+            except:
+                print(bin, len(self.frame_numbers[bin]))
+                print(self.data_paths[index])
         else:
             st = local_state.randint(0, len(self.frame_numbers[bin])-self.n_sampled_frames)
             sampleT = np.array(self.frame_numbers[bin][st:st+self.n_sampled_frames])
@@ -205,7 +234,7 @@ class VideoDataFashion(data.Dataset):
         w_vector = torch.load(inversion_path, map_location='cpu')
         if w_vector.shape[0] != 1:
             w_vector = w_vector.unsqueeze(0)
-        assert (w_vector.shape == (1, 18, 512)), f"Inverted vector has incorrect shape {w_vector.shape}"
+        # assert (w_vector.shape == (1, 18, 512)), f"Inverted vector has incorrect shape {w_vector.shape}"
         return w_vector
     
     def __len__(self):

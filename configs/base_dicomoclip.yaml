@@ -50,9 +50,9 @@ model:
         latent_dim : 8 # must match vae_cond_enc
 
     stylegan_gen_config:
-      target: dicomogan.models.stylegan.StyleGAN2Generator
+      target: dicomogan.models.stylegan.StyleGAN2Sky
       params:
-        pkl_file: /kuacc/users/abond19/VideoEditing/dicomogan/StyleGAN_Human/ckpts/stylegan_human_v2_1024.pkl
+        pkl_file: /kuacc/users/abond19/VideoEditing/encoder4editing/mocogan_stylegan2.py
     
     mapping_config:
       target: dicomogan.modules.MappingNetworkVAE

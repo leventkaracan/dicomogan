@@ -9,6 +9,7 @@ import numpy as np
 from StyleGAN_Human import dnnlib, legacy
 # from StyleGAN_Human.torch_utils.models import Generator as FashionGenerator
 from StyleGAN_Human.stylegan2.model import Generator as FashionGenerator
+from mocogan_stylegan2 import Generator as MoCoGenerator
 import legacy2 as legacy_e4e
 import misc2 as misc_e4e
 import os
@@ -50,6 +51,32 @@ class StyleGAN2Face_FT(nn.Module):
         # self.G([w], input_is_latent=True, randomize_noise=False, return_latents=False)
         imgs, _ =  self.G([w], input_is_latent=True, return_latents=True, randomize_noise=False)
         return imgs 
+
+
+class StyleGAN2Sky(nn.Module):
+    def __init__(self, pkl_file):
+        super().__init__()
+        self.G = MoCoGenerator(128, 512, 8)
+        pkl_obj = torch.load(pkl_file, map_location='cpu')
+        if 'g' in pkl_obj:
+            pkl_obj = pkl_obj['g']
+        elif 'G_ema' in pkl_obj:
+            pkl_obj = pkl_obj['G_ema']
+        elif 'g_ema' in pkl_obj:
+            pkl_obj = pkl_obj['g_ema']
+        else:
+            raise "cannot find appropriate key"
+        self.G.load_state_dict(pkl_obj, strict=True)
+        self.G.float().eval()
+        for parameter in self.G.parameters():
+            parameter.requires_grad = False
+    
+    def forward(self, w, return_latents=False, input_is_latent=True):
+        out =  self.G([w], input_is_latent=input_is_latent, return_latents=True, randomize_noise=False)
+        if return_latents:
+            return out
+        else: 
+            return out[0]
 
 
 class StyleGAN2Face(nn.Module):
