@@ -203,8 +203,8 @@ class VideoDataFashion(data.Dataset):
 
             # Getting the inversion
             if self.inversion_root is not None:
-                assert self.inversion_paths[index][i][len(self.inversion_root):].split('.')[0] == self.data_paths[index][i][len(self.img_root):].split('.')[0],\
-                     f"inverstion path does not matched image {self.inversion_paths[index][i][len(self.inversion_root):].split('.')[0]} : {self.data_paths[index][i][len(self.img_root):].split('.')[0]}"
+                # assert self.inversion_paths[index][i][len(self.inversion_root):].split('.')[0] == self.data_paths[index][i][len(self.img_root):].split('.')[0],\
+                #      f"inverstion path does not matched image {self.inversion_paths[index][i][len(self.inversion_root):].split('.')[0]} : {self.data_paths[index][i][len(self.img_root):].split('.')[0]}"
                 w_path = self.inversion_paths[index][i]
                 w_vec = self.get_inversion(w_path)
                 W = w_vec if W is None else torch.cat([W, w_vec], dim=0)

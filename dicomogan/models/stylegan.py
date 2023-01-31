@@ -79,6 +79,26 @@ class StyleGAN2Sky(nn.Module):
             return out[0]
 
 
+
+class StyleGAN2TaiChi(nn.Module):
+    def __init__(self, pkl_file):
+        super().__init__()
+        self.G = Generator(256, 512, 2, channel_multiplier=1)
+        pkl_obj = torch.load(pkl_file, map_location='cpu')
+        if 'g' in pkl_obj:
+            pkl_obj = pkl_obj['g']
+        elif 'G_ema' in pkl_obj:
+            pkl_obj = pkl_obj['G_ema']
+        elif 'g_ema' in pkl_obj:
+            pkl_obj = pkl_obj['g_ema']
+        self.G.load_state_dict(pkl_obj, strict=True)
+        self.G.float().eval()
+        for parameter in self.G.parameters():
+            parameter.requires_grad = False
+    
+    def forward(self, w):
+        return self.G([w], input_is_latent=True, randomize_noise=False)[0]
+
 class StyleGAN2Face(nn.Module):
     def __init__(self, pkl_file):
         super().__init__()

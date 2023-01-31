@@ -568,7 +568,9 @@ class DiCoMOGANCLIP(pl.LightningModule):
 
     def downsample_log(self, ret):
         for k, v in ret.items():
+            # print("before", ret[k].shape)
             ret[k] = nn.functional.interpolate(v, size=self.frame_log_size, mode="nearest")
+            # print("after", ret[k].shape)
         return ret
 
     def log_gif(self, video, range, name):
