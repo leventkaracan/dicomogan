@@ -13,7 +13,7 @@
 
 DiCoMoGAN is a video editing framework for manipulating videos with natural language, aiming to perform local and semantic edits on a video clip to alter the appearances of an object of interest. Our GAN architecture allows for better utilization of multiple observations by disentangling content and motion to enable controllable semantic edits. To this end, we introduce two tightly coupled networks: (i) a representation network for constructing a concise understanding of motion dynamics and temporally invariant content, and (ii) a translation network that exploits the extracted latent content representation to actuate the manipulation according to the target description. Our qualitative and quantitative evaluations demonstrate that DiCoMoGAN significantly outperforms existing frame-based methods, producing temporally coherent and semantically more meaningful results.
 
-For more details, you can reach the [paper](https://bmvc2022.mpi-inf.mpg.de/443/). 
+For more details, you can reach the [paper](https://bmvc2022.mpi-inf.mpg.de/443/) and [project page](https://cyberiada.github.io/DiCoMoGAN/)
 ## Installation
 
 DiCoMOGAN is coded with PyTorch
