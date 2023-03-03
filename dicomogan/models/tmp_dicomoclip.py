@@ -452,6 +452,8 @@ class DiCoMOGANCLIP(pl.LightningModule):
         return a dictionary of tensors in the range [-1, 1]
         """
         ret = dict()
+        if self.current_epoch % 10 != 0:
+            return ret
         input_desc = batch['raw_desc'] # B
         vid_bf = batch['real_img'] # B x T x C x H x W 
         inverted_vid_bf = batch['inverted_img'] # B x T x ch x H x W -- range [0, 1]
