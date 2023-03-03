@@ -100,9 +100,9 @@ class StyleGAN2TaiChi(nn.Module):
         return self.G([w], input_is_latent=True, randomize_noise=False)[0]
 
 class StyleGAN2Face(nn.Module):
-    def __init__(self, pkl_file):
+    def __init__(self, pkl_file, res=1024):
         super().__init__()
-        self.G = Generator(1024, 512, 8)
+        self.G = Generator(res, 512, 8)
         pkl_obj = torch.load(pkl_file, map_location='cpu')
         if 'g' in pkl_obj:
             pkl_obj = pkl_obj['g']
