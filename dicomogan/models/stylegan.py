@@ -101,6 +101,7 @@ class StyleGAN2TaiChi(nn.Module):
 
 class StyleGAN2Face(nn.Module):
     def __init__(self, pkl_file, res=1024):
+        pkl_file = '/scratch/users/abond19/hpc_run/VideoEditing/aligning_face_videos/StyleCLIP/stylegan2-ffhq-config-f.pt'
         super().__init__()
         self.G = Generator(res, 512, 8)
         pkl_obj = torch.load(pkl_file, map_location='cpu')

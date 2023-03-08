@@ -238,7 +238,7 @@ class DiCoMOGANCLIP(pl.LightningModule):
         return ret
 
 
-    def forward(self, vid_bf, sampleT, mean_inversion, txt_feat, frame_feat, mask=None):
+    def forward(self, vid_bf, sampleT, mean_inversion, txt_feat, frame_feat, rep_video_dynamics=None, mask=None):
         bs, T, ch, height, width = vid_bf.size()
 
         # repeat features
@@ -259,7 +259,9 @@ class DiCoMOGANCLIP(pl.LightningModule):
             mask = torch.ones(T, 1)
 
         # vae encode frames
-        rep_video_dynamics = self.video_dynamic_rep(vid_bf, ts, mask=mask) 
+        if rep_video_dynamics is None:
+            rep_video_dynamics = self.video_dynamic_rep(vid_bf, ts, mask=mask) 
+        
         frame_dynamics = self.sample_frames_dynamics(rep_video_dynamics, ts) # T * B x D x H' x W'
         frame_dynamics = frame_dynamics.permute(0, 2, 3, 1).contiguous().view(T*bs, -1, frame_dynamics.shape[1]) # T * B x H' * W' x D
         frame_rep = torch.cat((txt_feat.unsqueeze(1), frame_feat.unsqueeze(1), frame_dynamics), 1) # T*B x D1+D2
